@@ -1,0 +1,1639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Contrastive Generation: Training a Few-Step Generator by
+Pulling and Pushing Its Samples | Haitao Lin</title>
+  <meta name="description" lang="en" content="MeanFlow, Distribution Matching Distillation and drifting models as one pull-push update: a few-step generator moves its samples toward a positive and away from a negative.">
+  <meta name="author" content="Haitao Lin">
+  <meta property="og:title" content="Contrastive Generation: Training a
+Few-Step Generator by Pulling and Pushing Its Samples">
+  <meta property="og:description" content="MeanFlow, Distribution Matching Distillation and drifting models as one pull-push update: a few-step generator moves its samples toward a positive and away from a negative.">
+  <meta property="og:type" content="article">
+
+  <link rel="shortcut icon" href="site/ht.jpeg">
+  <link rel="stylesheet" href="site/main.css">
+  <link rel="stylesheet" href="site/blog.css">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <style>
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { color: #008000; } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { color: #008000; font-weight: bold; } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+  </style>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]], tags: "none" },
+      chtml: { scale: 0.98 },
+      options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"] }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+
+<header class="site-header">
+  <div class="wrapper">
+    <a class="site-title" href="https://edapinenut.github.io/">Haitao Lin</a>
+    <nav class="site-nav">
+      <div class="trigger">
+        <a class="page-link" href="https://edapinenut.github.io/"><b>Home</b></a>
+        <a class="page-link" href="https://edapinenut.github.io/#blog"><b>Blog</b></a>
+        <a class="page-link" href="https://github.com/EDAPINENUT/contrast_gen.edapinenut.github.io"><b>Code</b></a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<div class="page-content">
+<div class="wrapper">
+<article class="post">
+
+  <header class="post-header">
+    <h1 class="post-title">Contrastive Generation: Training a Few-Step
+Generator by Pulling and Pushing Its Samples</h1>
+    <p class="post-meta">
+      <a href="https://edapinenut.github.io/">Haitao Lin</a> &middot; October
+2026 &middot;
+      <a href="https://github.com/EDAPINENUT/contrast_gen.edapinenut.github.io/blob/main/demo/contrastive_generation.ipynb"><i class="fa fa-github" aria-hidden="true"></i> notebook &amp; code</a>
+    </p>
+  </header>
+
+  <nav class="toc">
+    <div class="toc-heading"><i class="fa fa-list-ul" aria-hidden="true"></i> Contents</div>
+<ul>
+<li><a href="#velocities-and-flow-maps"
+id="toc-velocities-and-flow-maps">1. Velocities and flow maps</a></li>
+<li><a href="#learning-the-flow-map-by-simulation"
+id="toc-learning-the-flow-map-by-simulation">2. Learning the flow map by
+simulation</a></li>
+<li><a href="#meanflow-and-dmd" id="toc-meanflow-and-dmd">3. MeanFlow
+and DMD</a></li>
+<li><a href="#meanflow-and-dmd-as-pull-and-push"
+id="toc-meanflow-and-dmd-as-pull-and-push">4. MeanFlow and DMD as pull
+and push</a></li>
+<li><a href="#the-design-space" id="toc-the-design-space">5. The design
+space</a></li>
+<li><a href="#toy-experiments" id="toc-toy-experiments">6. Toy
+experiments</a></li>
+<li><a href="#extension-drifting-models"
+id="toc-extension-drifting-models">7. Extension: Drifting
+models</a></li>
+<li><a href="#conclusion" id="toc-conclusion">8. Conclusion</a></li>
+<li><a href="#appendix" id="toc-appendix">Appendix</a></li>
+<li><a href="#code-1" id="toc-code-1">Code</a></li>
+</ul>
+  </nav>
+
+  <div class="post-body">
+<p>A few-step generator turns noise into a sample with one or a few
+network calls. This post shows that two common ways of training such a
+generator, MeanFlow and Distribution Matching Distillation (DMD), use
+the same update. Each update moves a point produced by the generator
+toward a <em>positive</em> point, which carries information about the
+data, and away from a <em>negative</em> point, which describes the
+generator itself. The two methods differ in how they obtain the negative
+and in which state they build the two points from. The recently proposed
+drifting models use the same update as well, with both points estimated
+directly from samples. Section 1 introduces the velocities and the
+one-step map in which all of these constructions are written.</p>
+<p>All pictures and numbers in this post come from one 2D toy problem,
+the two-moons dataset, with a flow-matching teacher and students
+distilled from it.</p>
+<hr />
+<h2 id="velocities-and-flow-maps">1. Velocities and flow maps</h2>
+<p>We use the linear interpolation of flow matching, with data at <span
+class="math inline">\(t=0\)</span> and noise at <span
+class="math inline">\(t=1\)</span>,</p>
+<p><span class="math display">\[
+x_t = (1-t)\,x_0 + t\,\epsilon,\qquad x_0\sim p_{\text{data}},\quad
+\epsilon\sim\mathcal N(0,I).
+\]</span></p>
+<p>We call <span class="math inline">\(t\)</span> the noise level, or
+simply the level, and write <span
+class="math inline">\(p_{\text{data},t}\)</span> for the distribution of
+<span class="math inline">\(x_t\)</span>, so that <span
+class="math inline">\(p_{\text{data},0}=p_{\text{data}}\)</span> and
+<span class="math inline">\(p_{\text{data},1}=\mathcal
+N(0,I)\)</span>.</p>
+<p><strong>Conditional velocity.</strong> One pair <span
+class="math inline">\((x_0,\epsilon)\)</span> defines one straight
+segment, and a point on it moves with velocity <span
+class="math inline">\(v_{\text{cond}} = \epsilon - x_0\)</span>.</p>
+<p><strong>Marginal velocity.</strong> Many segments pass through the
+same point <span class="math inline">\(x_t\)</span>. Their average,
+weighted by the posterior over pairs given <span
+class="math inline">\(x_t\)</span>, is the marginal velocity</p>
+<p><span class="math display">\[
+v(x_t,t) = \mathbb E\big[\epsilon - x_0 \,\big|\, x_t\big].
+\]</span></p>
+<p>Following a velocity backward to level 0 shows what it encodes.
+Extending a segment backward by <span class="math inline">\(t\)</span>
+reaches its own <span class="math inline">\(x_0\)</span>, since <span
+class="math inline">\(x_t - t\,v_{\text{cond}} = x_0\)</span>. Extending
+the marginal velocity backward reaches the posterior mean, <span
+class="math inline">\(x_t - t\,v(x_t,t) = \mathbb E[x_0\mid
+x_t]\)</span>. For a point between the two moons, this mean lies in the
+empty region between them.</p>
+<p><strong>ODE trajectories.</strong> Integrating <span
+class="math inline">\(dx/dt = v(x,t)\)</span> from <span
+class="math inline">\(t=1\)</span> to <span
+class="math inline">\(t=0\)</span> carries noise onto the moons. Unlike
+the conditional segments, these trajectories never cross, and they are
+curved. Following them accurately takes many small steps, that is, many
+network calls, or function evaluations (NFE). Given a state <span
+class="math inline">\(x_t\)</span>, we write <span
+class="math inline">\(x_s\)</span> for the point at level <span
+class="math inline">\(s\)</span> on the ODE trajectory through <span
+class="math inline">\(x_t\)</span>. The ODE carries <span
+class="math inline">\(p_{\text{data},t}\)</span> to <span
+class="math inline">\(p_{\text{data},s}\)</span>, so <span
+class="math inline">\(x_s\)</span> has the same distribution as the
+interpolation at level <span class="math inline">\(s\)</span>, but it is
+a deterministic function of <span class="math inline">\(x_t\)</span>
+rather than a new interpolation sample.</p>
+<p><strong>Average velocity and flow map.</strong> A few-step generator
+does not follow the curved trajectory. It jumps from <span
+class="math inline">\(x_t\)</span> directly to a point at a lower level
+<span class="math inline">\(r&lt;t\)</span>. The velocity that makes
+this jump exact is the <em>average velocity</em> over <span
+class="math inline">\([r,t]\)</span>,</p>
+<p><span class="math display">\[
+u(x_t,t,r) = \frac{1}{t-r}\int_r^t v(x_s,s)\,ds = \frac{x_t - x_r}{t-r}.
+\]</span></p>
+<p>Rearranging gives the <strong>flow map</strong> from level <span
+class="math inline">\(t\)</span> to level <span
+class="math inline">\(r\)</span>, which sends <span
+class="math inline">\(x_t\)</span> to the point <span
+class="math inline">\(x_r\)</span> on its trajectory,</p>
+<p><span class="math display">\[
+x_r = x_t - (t-r)\,u(x_t,t,r).
+\]</span></p>
+<p>Once <span class="math inline">\(u\)</span> is known, an exact jump
+is a single subtraction. The same subtraction can be carried out with
+any velocity <span class="math inline">\(v\)</span>, and we write it
+as</p>
+<p><span class="math display">\[
+X[x_t, v, r] \;=\; x_t - (t-r)\,v .
+\]</span></p>
+<p>The start level of <span class="math inline">\(X\)</span> is the
+level of its first argument, so <span
+class="math inline">\(X[x_{t&#39;},v,0]\)</span> starts at level <span
+class="math inline">\(t&#39;\)</span>. We reserve the name flow map for
+<span class="math inline">\(X[x_t,u,r]=x_r\)</span>, the case with the
+exact average velocity, and call <span
+class="math inline">\(X[x_t,v,r]\)</span> with any other velocity a
+<em>one-step map</em>. With the instantaneous velocity <span
+class="math inline">\(v(x_t,t)\)</span>, the one-step map is one Euler
+step. Its endpoint lies on the tangent line of the trajectory at <span
+class="math inline">\(x_t\)</span>, and we call it the <strong>tangent
+point</strong>. The tangent point misses <span
+class="math inline">\(x_r\)</span> whenever the trajectory curves
+between <span class="math inline">\(t\)</span> and <span
+class="math inline">\(r\)</span>. A <span
+class="math inline">\(K\)</span>-step sampler chooses levels <span
+class="math inline">\(1=t_0&gt;t_1&gt;\dots&gt;t_K=0\)</span> and,
+starting from <span class="math inline">\(\epsilon\)</span>, applies
+<span class="math inline">\(K\)</span> one-step maps in sequence.</p>
+<p>In practice <span class="math inline">\(v\)</span> is replaced by a
+teacher network <span class="math inline">\(v_{\text{teacher}}\)</span>
+trained by flow matching. From Section 2 on, the ODE, its trajectories,
+the average velocity <span class="math inline">\(u\)</span> and the flow
+map all refer to the teacher’s field.</p>
+<hr />
+<h2 id="learning-the-flow-map-by-simulation">2. Learning the flow map by
+simulation</h2>
+<p>The student is a network <span
+class="math inline">\(u_\theta(x,t,r)\)</span> that outputs an average
+velocity. Its prediction of the flow map from a state <span
+class="math inline">\(x_t\)</span> is <span class="math inline">\(\hat
+x^\theta_r = X[x_t,u_\theta,r]\)</span>, the point that one jump of the
+student reaches. Running the <span class="math inline">\(K\)</span>-step
+sampler with <span class="math inline">\(u_\theta\)</span> from noise
+<span class="math inline">\(\epsilon\)</span> gives the student’s
+generator, which we write <span
+class="math inline">\(G_\theta(\epsilon)\)</span>.</p>
+<p>The most direct way to train the student is to integrate the
+teacher’s ODE from <span class="math inline">\(t\)</span> to <span
+class="math inline">\(r\)</span> with an accurate solver and regress the
+student’s prediction onto the point the solver reaches. With <span
+class="math inline">\(\mathrm{sg}(\cdot)\)</span> denoting the
+stop-gradient, which treats its argument as a constant when
+differentiating, the loss is</p>
+<p><span class="math display">\[
+\mathcal L_{\text{sim}} = \big\| \hat x^\theta_r - \mathrm{sg}\big(\hat
+x^{\text{sim}}_r\big) \big\|^2,
+\qquad \hat x^{\text{sim}}_r = \text{ODE}(x_t, v_{\text{teacher}}, t\to
+r).
+\]</span></p>
+<p>Its gradient is</p>
+<p><span class="math display">\[
+\nabla_\theta \mathcal L_{\text{sim}} = -2\Big(\frac{\partial \hat
+x^\theta_r}{\partial\theta}\Big)^{\!\top}\big(\hat x^{\text{sim}}_r -
+\mathrm{sg}(\hat x^\theta_r)\big).
+\]</span></p>
+<p>To see which way this loss moves the student’s point, take one
+gradient step with learning rate <span
+class="math inline">\(\eta\)</span>, <span
+class="math inline">\(\Delta\theta = -\eta\,\nabla_\theta\mathcal
+L_{\text{sim}} = 2\eta\,\big(\partial \hat
+x^\theta_r/\partial\theta\big)^{\!\top}\big(\hat x^{\text{sim}}_r - \hat
+x^\theta_r\big)\)</span>. To first order the point moves by</p>
+<p><span class="math display">\[
+\Delta \hat x^\theta_r \approx \frac{\partial \hat
+x^\theta_r}{\partial\theta}\,\Delta\theta
+= 2\eta\,\frac{\partial \hat
+x^\theta_r}{\partial\theta}\Big(\frac{\partial \hat
+x^\theta_r}{\partial\theta}\Big)^{\!\top}\big(\hat x^{\text{sim}}_r -
+\hat x^\theta_r\big).
+\]</span></p>
+<p>The matrix in front of the difference is positive semi-definite, so
+the step never points against <span class="math inline">\(\hat
+x^{\text{sim}}_r - \hat x^\theta_r\)</span>. Each update therefore moves
+<span class="math inline">\(\hat x^\theta_r\)</span> toward the
+simulated point <span class="math inline">\(\hat
+x^{\text{sim}}_r\)</span> and away from its own current position.</p>
+<p>Contrastive learning describes training in the same terms, as moving
+toward one point and away from another. We call the point the update
+approaches the <em>positive</em> and the point it leaves the
+<em>negative</em>,</p>
+<p><span class="math display">\[
+x_{\text{pos}} = \hat x^{\text{sim}}_r,\qquad x_{\text{neg}} =
+\mathrm{sg}\big(\hat x^\theta_r\big),
+\]</span></p>
+<p>and write the gradient as</p>
+<p><span class="math display">\[
+\boxed{\;\nabla_\theta\mathcal L_{\text{pp}} =
+-2\,W\,\Big(\frac{\partial \hat
+x^\theta_r}{\partial\theta}\Big)^{\!\top}\big(x_{\text{pos}} -
+x_{\text{neg}}\big)\;}
+\]</span></p>
+<p>with a per-sample weight <span class="math inline">\(W&gt;0\)</span>,
+which is <span class="math inline">\(1\)</span> for the simulation loss.
+We call the boxed expression the <strong>pull-push gradient</strong>. In
+this form, plain regression onto a target is a pull-push update whose
+negative is the student’s own current output. Section 4 shows that
+MeanFlow and DMD have the same form.</p>
+<p>The gradient can also be written back as a loss. For any vector <span
+class="math inline">\(A\)</span> and any differentiable <span
+class="math inline">\(B_\theta\)</span>,</p>
+<p><span class="math display">\[
+-2\,\mathrm{sg}(A)^{\!\top}\,\nabla_\theta B_\theta \;=\;
+\nabla_\theta\,\big\|B_\theta - \mathrm{sg}\big(B_\theta +
+A\big)\big\|^2 ,
+\]</span></p>
+<p>because the right side differentiates to <span
+class="math inline">\(2\,(B_\theta - B_\theta - A)^{\!\top}\nabla_\theta
+B_\theta\)</span>. With <span class="math inline">\(B_\theta = \hat
+x^\theta_r\)</span> and <span class="math inline">\(A = x_{\text{pos}} -
+x_{\text{neg}}\)</span>, the pull-push gradient is the gradient of the
+<strong>pull-push loss</strong></p>
+<p><span class="math display">\[
+\mathcal L_{\text{pp}} = W\,\big\|\hat x^\theta_r - \mathrm{sg}\big(\hat
+x^\theta_r + x_{\text{pos}} - x_{\text{neg}}\big)\big\|^2 .
+\]</span></p>
+<p>Throughout the post, <span
+class="math inline">\(x_{\text{pos}}\)</span> and <span
+class="math inline">\(x_{\text{neg}}\)</span> are treated as constants,
+so no gradient flows through them. Only their difference enters the
+update, and shifting both points by the same constant vector leaves the
+gradient unchanged. We call this the shift invariance and use it in
+Section 4.</p>
+<figure>
+<img src="materials/trajectory_distillation.gif"
+alt="Trajectory distillation in the toy. One-step and two-step samples of the student over training (data in blue), and its KL to the data, mean over three seeds." />
+<figcaption aria-hidden="true">Trajectory distillation in the toy.
+One-step and two-step samples of the student over training (data in
+blue), and its KL to the data, mean over three seeds.</figcaption>
+</figure>
+<p><strong>Why “contrastive”.</strong> The positive comes from the
+target and the negative from the model itself. Contrastive divergence
+(<a href="https://doi.org/10.1162/089976602760128018">Hinton, 2002</a>)
+splits its gradient in the same way, into a positive phase driven by the
+data and a negative phase driven by the model. Contrastive Flow Matching
+(<a href="https://arxiv.org/abs/2506.05350">Stoica et al., 2025</a>)
+uses the word differently, since its negative is another training pair
+from the batch. In this post the negative is always an estimate that
+describes the model itself.</p>
+<p><strong>Naming and cost.</strong> Regressing the student’s flow map
+onto a simulated trajectory is known as trajectory consistency. It
+belongs to the line of progressive distillation (<a
+href="https://arxiv.org/abs/2202.00512">Salimans &amp; Ho, 2022</a>),
+consistency models (<a href="https://arxiv.org/abs/2303.01469">Song et
+al., 2023</a>) and consistency trajectory models (<a
+href="https://arxiv.org/abs/2310.02279">Kim et al., 2024</a>). It is
+accurate but expensive, because every <span
+class="math inline">\((t,r)\)</span> pair costs a full ODE solve, which
+takes dozens of teacher calls. The rest of the post asks whether a
+single teacher call per update can replace that solve.</p>
+<hr />
+<h2 id="meanflow-and-dmd">3. MeanFlow and DMD</h2>
+<h3 id="meanflow">MeanFlow</h3>
+<p>MeanFlow (<a href="https://arxiv.org/abs/2505.13447">Geng et al.,
+2025</a>) starts from the definition of the average velocity.
+Multiplying it by <span class="math inline">\((t-r)\)</span> and
+differentiating in <span class="math inline">\(t\)</span> removes the
+integral and gives the <strong>MeanFlow identity</strong> (Appendix
+A)</p>
+<p><span class="math display">\[
+u(x_t,t,r) = v(x_t,t) - (t-r)\,\frac{d}{dt}u(x_t,t,r),
+\qquad
+\frac{d}{dt}u = \partial_t u + (\partial_x u)\,v ,
+\]</span></p>
+<p>where <span class="math inline">\(d/dt\)</span> is the total
+derivative along the trajectory through <span
+class="math inline">\(x_t\)</span> and <span
+class="math inline">\(\partial_x u\)</span> is the Jacobian of <span
+class="math inline">\(u\)</span> with respect to <span
+class="math inline">\(x\)</span>. Replacing <span
+class="math inline">\(u\)</span> by the student and stopping the
+gradient through the derivative gives</p>
+<p><span class="math display">\[
+J = (t-r)\,\mathrm{sg}\Big(\frac{d}{dt}u_\theta\Big),
+\qquad
+\mathcal L_{\text{MF}} = \big\| u_\theta(x_t,t,r) -
+\mathrm{sg}\big(v_{\text{target}} - J\big)\big\|^2 .
+\]</span></p>
+<p>Here <span class="math inline">\(J\)</span> is a name for this scaled
+derivative term, not a Jacobian matrix. The original method needs no
+teacher. It sets <span class="math inline">\(v_{\text{target}} =
+v_{\text{cond}} = \epsilon - x_0\)</span> and builds <span
+class="math inline">\(x_t\)</span> by interpolating a data point with
+noise. We call states built this way <em>off-policy</em>, and states
+built by noising the student’s own samples <em>on-policy</em>. The
+distilled version used in this post sets <span
+class="math inline">\(v_{\text{target}} =
+v_{\text{teacher}}(x_t,t)\)</span> and takes the total derivative along
+the teacher’s trajectory, <span
+class="math inline">\(\frac{d}{dt}u_\theta = \partial_t u_\theta +
+(\partial_x u_\theta)\,v_{\text{teacher}}\)</span>, while the original
+method uses <span class="math inline">\(v_{\text{cond}}\)</span> in its
+place. The derivative costs one Jacobian-vector product (JVP) of <span
+class="math inline">\(u_\theta\)</span> in the direction <span
+class="math inline">\((v_{\text{teacher}},1,0)\)</span> of its inputs
+<span class="math inline">\((x,t,r)\)</span>, or a finite
+difference.</p>
+<h3 id="dmd">DMD</h3>
+<p>Distribution Matching Distillation (<a
+href="https://arxiv.org/abs/2311.18828">Yin et al., 2024a</a>; <a
+href="https://arxiv.org/abs/2405.14867">2024b</a>) trains a generator
+<span class="math inline">\(G_\theta\)</span> to minimize the reverse KL
+divergence between its distribution and the data, averaged over noise
+levels. In this post <span class="math inline">\(G_\theta\)</span> is
+the student’s <span class="math inline">\(K\)</span>-step sampler from
+Section 2. Let <span class="math inline">\(p_{\theta,t}\)</span> be the
+distribution of the student’s samples carried to level <span
+class="math inline">\(t\)</span> by the same interpolation, <span
+class="math inline">\((1-t)\,G_\theta(\epsilon)+t\,\epsilon&#39;\)</span>
+with fresh noise <span class="math inline">\(\epsilon&#39;\)</span>. DMD
+minimizes <span
+class="math inline">\(\mathrm{KL}(p_{\theta,t}\,\|\,p_{\text{data},t})\)</span>
+averaged over <span class="math inline">\(t\)</span>. Besides the
+teacher, whose velocity belongs to <span
+class="math inline">\(p_{\text{data},t}\)</span>, it trains a second
+velocity network <span class="math inline">\(v_\phi(x,t)\)</span>,
+called the <em>fake</em>. The fake is fitted online by a denoising loss
+on the generator’s samples, which in the velocity parametrization of
+this post is flow matching, so it tracks the velocity of <span
+class="math inline">\(p_{\theta,t}\)</span>.</p>
+<p>Take a sample <span class="math inline">\(\hat x =
+G_\theta(\epsilon)\)</span> and add fresh noise to it up to a level
+<span class="math inline">\(t&#39;\)</span>, <span
+class="math inline">\(x_{t&#39;} = (1-t&#39;)\,\mathrm{sg}(\hat x) +
+t&#39;\epsilon&#39;\)</span>. We call this step <em>renoising</em>. The
+DMD gradient is</p>
+<p><span class="math display">\[
+\nabla_\theta\mathcal L_{\text{DMD}} = \mathbb
+E\Big[w_{t&#39;}\,\mathrm{sg}\big(v_{\text{teacher}} -
+v_\phi\big)(x_{t&#39;})^{\!\top}\,\frac{\partial \hat
+x}{\partial\theta}\Big],
+\qquad w_{t&#39;}=\frac{1-t&#39;}{t&#39;} ,
+\]</span></p>
+<p>which is the score difference <span class="math inline">\(\nabla\log
+p_{\theta,t&#39;} - \nabla\log p_{\text{data},t&#39;}\)</span> written
+with velocities (Appendix B). The weight <span
+class="math inline">\(w_{t&#39;}\)</span> is the one this conversion
+produces. DMD itself replaces it by a per-sample weight that normalizes
+the gradient magnitude across noise levels, which changes only <span
+class="math inline">\(W\)</span> below. DMD is on-policy by
+construction, because its loss is an expectation over the student’s
+samples, and it moves the clean sample at level <span
+class="math inline">\(r=0\)</span>. Its multi-step version (Yin et al.,
+2024b) uses a stochastic sampler, which renoises each clean prediction
+to the next level instead of following a one-step map. During training,
+the generator’s inputs are the noisy states produced by running the
+current student for several steps, and the loss is applied to the
+generator’s output at that step.</p>
+<hr />
+<h2 id="meanflow-and-dmd-as-pull-and-push">4. MeanFlow and DMD as pull
+and push</h2>
+<h3 id="one-teacher-call-gives-only-a-tangent-point">One teacher call
+gives only a tangent point</h3>
+<p>The positive of Section 2 needs a full ODE solve, which costs many
+teacher calls. MeanFlow and DMD call the teacher once per update. That
+call returns the teacher’s instantaneous velocity at the state <span
+class="math inline">\(x_t\)</span>, and the only point it can produce is
+the one-step map with that velocity, the teacher’s tangent point</p>
+<p><span class="math display">\[
+x_{\text{pos}} = X[x_t, v_{\text{teacher}}, r].
+\]</span></p>
+<p>On a curved trajectory this point misses the flow map <span
+class="math inline">\(x_r = X[x_t,u,r]\)</span>. If the student’s
+prediction <span class="math inline">\(\hat x^\theta_r =
+X[x_t,u_\theta,r]\)</span> were used as the negative, the gap would
+never close, since even a perfect student would keep being pulled off
+the trajectory toward the tangent point. The negative therefore has to
+be built in the same way, as a one-step map from the same <span
+class="math inline">\(x_t\)</span> with an instantaneous velocity that
+belongs to the student. We write this velocity as <span
+class="math inline">\(v_{\text{student}}\)</span> and specify it in the
+next two subsections. The negative is then the student’s tangent
+point,</p>
+<p><span class="math display">\[
+x_{\text{neg}} = X[x_t, v_{\text{student}}, r].
+\]</span></p>
+<p>The difference of the two points, <span
+class="math inline">\(x_{\text{pos}} - x_{\text{neg}} =
+-(t-r)\,(v_{\text{teacher}} - v_{\text{student}})\)</span>, no longer
+contains the curvature gap. It compares only the two instantaneous
+velocities and vanishes once they agree, however curved the trajectory
+is. This difference is what moves the student’s prediction <span
+class="math inline">\(\hat x^\theta_r\)</span>.</p>
+<figure>
+<img src="materials/f2_tangent_vs_chord.png"
+alt="Flow maps from one intermediate state x_t. (a) One teacher call gives the tangent point X[x_t, v_teacher, r], which misses the flow map x_r on the curved trajectory. (b) The positive is the teacher’s tangent point and the negative is the student’s tangent point, and their difference x_pos - x_neg moves the student’s prediction X[x_t, u_theta, r]." />
+<figcaption aria-hidden="true">Flow maps from one intermediate state
+x_t. (a) One teacher call gives the tangent point X[x_t, v_teacher, r],
+which misses the flow map x_r on the curved trajectory. (b) The positive
+is the teacher’s tangent point and the negative is the student’s tangent
+point, and their difference x_pos - x_neg moves the student’s prediction
+X[x_t, u_theta, r].</figcaption>
+</figure>
+<p>In the figure, the horizontal axis is the noise level, running from
+<span class="math inline">\(t\)</span> on the left through <span
+class="math inline">\(r\)</span> to <span
+class="math inline">\(0\)</span>, and the vertical axis stands for
+position. In panel (a), the curve is the teacher’s ODE trajectory from
+<span class="math inline">\(x_t\)</span>. The solid arrow is the flow
+map, which ends on the trajectory at <span
+class="math inline">\(x_r\)</span>. The dashed arrow ends at the tangent
+point that one teacher call gives, and the red bracket marks the gap
+between the two. In panel (b), the green dashed arrow ends at the
+positive, the teacher’s tangent point, and the red dashed arrow ends at
+the negative, the student’s tangent point taken from the student’s own
+trajectory in orange. The orange solid arrow is the student’s prediction
+<span class="math inline">\(\hat x^\theta_r\)</span>, the point that
+training moves. The black arrow is the update <span
+class="math inline">\(x_{\text{pos}} - x_{\text{neg}}\)</span> applied
+to it, and the hollow circle marks <span
+class="math inline">\(x_r\)</span>, where the student should end up.</p>
+<p>The two methods therefore differ in how they obtain the student’s
+instantaneous velocity. The student outputs only average velocities, so
+an instantaneous velocity has to be derived from it in some way. In
+MeanFlow the velocity is <em>intrinsic</em>, meaning that it is computed
+from the student network itself. In DMD it is <em>extrinsic</em>,
+meaning that a separate network with its own parameters learns it.</p>
+<p>In the toy, every student starts as the teacher. At initialization
+<span
+class="math inline">\(u_\theta(x,t,r)=v_{\text{teacher}}(x,t)\)</span>
+for every <span class="math inline">\(r\)</span>, so the student’s
+prediction coincides with the teacher’s tangent point, and training has
+to move it from the tangent point to the flow map.</p>
+<h3 id="meanflow-an-intrinsic-negative">MeanFlow, an intrinsic
+negative</h3>
+<p>Rearranging the MeanFlow identity gives an instantaneous velocity
+computed from the student itself, <span
+class="math inline">\(v_{\text{ind}} = u_\theta + J\)</span>. It needs
+no new parameters, only the student and its derivative at the same
+state. MeanFlow is the pull-push gradient with</p>
+<p><span class="math display">\[
+x_{\text{pos}} = X[x_t, v_{\text{teacher}}, r],\qquad
+x_{\text{neg}} = X[x_t, \mathrm{sg}(u_\theta) + J, r],\qquad
+W = \frac{1}{(t-r)^2}.
+\]</span></p>
+<p>To see this, write the MeanFlow loss in terms of points. A squared
+velocity difference is a scaled squared distance between one-step maps
+from the same state, <span class="math inline">\(\|v_1 - v_2\|^2 =
+\|X[x_t,v_1,r]-X[x_t,v_2,r]\|^2/(t-r)^2\)</span> (Appendix D), so <span
+class="math inline">\(\mathcal L_{\text{MF}} = W\,\|\hat x^\theta_r -
+X[x_t, v_{\text{teacher}} - J, r]\|^2\)</span>. Because <span
+class="math inline">\(J\)</span> carries no gradient, its gradient is
+<span class="math inline">\(-2W\,(\partial \hat
+x^\theta_r/\partial\theta)^{\top}\big(X[x_t, v_{\text{teacher}} - J, r]
+- \hat x^\theta_r\big)\)</span>, and the last factor equals <span
+class="math inline">\(x_{\text{pos}} - x_{\text{neg}}\)</span>
+above.</p>
+<p>The shift invariance gives a second reading. Moving both points by
+<span class="math inline">\((t-r)J\)</span> gives</p>
+<p><span class="math display">\[
+x_{\text{pos}}&#39; = X[x_t, v_{\text{teacher}} - J, r],\qquad
+x_{\text{neg}}&#39; = \mathrm{sg}(\hat x^\theta_r).
+\]</span></p>
+<p>This is the simulation loss of Section 2, with the simulated point
+replaced by one teacher call plus a correction computed from the
+student’s own derivative. When the student is exact, the MeanFlow
+identity gives <span class="math inline">\(v_{\text{teacher}} - J =
+u\)</span>, and <span class="math inline">\(x_{\text{pos}}&#39;\)</span>
+is the flow map <span class="math inline">\(x_r\)</span> that the
+simulation would reach.</p>
+<h3 id="dmd-an-extrinsic-negative">DMD, an extrinsic negative</h3>
+<p>For DMD, we convert the velocity difference into points at level 0,
+built from the renoised sample,</p>
+<p><span class="math display">\[
+x_{\text{pos}} = X[x_{t&#39;}, v_{\text{teacher}}, 0],\qquad
+x_{\text{neg}} = X[x_{t&#39;}, v_\phi, 0],
+\]</span></p>
+<p>so that <span class="math inline">\(v_{\text{teacher}}-v_\phi =
+-(x_{\text{pos}}-x_{\text{neg}})/t&#39;\)</span>. DMD is then the
+pull-push gradient with the generator’s sample <span
+class="math inline">\(\hat x\)</span> as the moved point and <span
+class="math inline">\(W = w_{t&#39;}/(2t&#39;)\)</span>. By Appendix B,
+<span class="math inline">\(X[x_{t&#39;},v,0]\)</span> is the posterior
+mean <span class="math inline">\(\mathbb E[x_0\mid x_{t&#39;}]\)</span>
+under the distribution whose velocity is <span
+class="math inline">\(v\)</span>, so the two points are the teacher’s
+and the fake’s estimates of the clean sample behind <span
+class="math inline">\(x_{t&#39;}\)</span>. The negative is extrinsic. It
+comes from a network with its own parameters, which follows the student
+only through the student’s samples.</p>
+<h3 id="where-the-points-are-built">Where the points are built</h3>
+<p>The two methods also build their points from different states.</p>
+<ul>
+<li>MeanFlow builds all three points from one state. The moved point
+<span class="math inline">\(\hat x^\theta_r\)</span>, the positive and
+the negative are one-step maps from the same <span
+class="math inline">\(x_t\)</span> to the same level <span
+class="math inline">\(r\)</span>, with three different velocities,
+namely the student’s average velocity, the teacher’s instantaneous
+velocity and the student’s induced instantaneous velocity. The negative
+contains <span class="math inline">\(\mathrm{sg}(u_\theta)\)</span> at
+that same state, so when the moved point shifts, the negative shifts
+with it, and in the shifted form the negative is the moved point itself.
+The update is a regression carried out separately at each <span
+class="math inline">\(x_t\)</span>.</li>
+<li>DMD builds its two points away from the moved point. The moved point
+is the sample <span class="math inline">\(\hat x\)</span>, while the
+positive and the negative are built from <span
+class="math inline">\(x_{t&#39;}\)</span>, a renoised copy of that
+sample, and only their difference is applied to <span
+class="math inline">\(\hat x\)</span>. Because <span
+class="math inline">\(x_{t&#39;}\)</span> is a noised copy of the moved
+point, it moves with the sample. This is the reparameterized gradient of
+the reverse KL, in which the score difference is evaluated at a noised
+copy of the sample.</li>
+</ul>
+<p>We write <span class="math inline">\(x_{\text{pred}}\)</span> for the
+point being moved, which is <span class="math inline">\(\hat
+x^\theta_r\)</span> in MeanFlow and the sample <span
+class="math inline">\(\hat x\)</span> in DMD. The update <span
+class="math inline">\(x_{\text{pos}} - x_{\text{neg}}\)</span> splits
+into an attraction <span class="math inline">\(x_{\text{pos}} -
+x_{\text{pred}}\)</span> toward the positive and a repulsion <span
+class="math inline">\(x_{\text{pred}} - x_{\text{neg}}\)</span> away
+from the negative. In MeanFlow all three points come from the same <span
+class="math inline">\(x_t\)</span>, so both parts are short and of the
+same size as the update. In DMD the positive and the negative are built
+at <span class="math inline">\(x_{t&#39;}\)</span>, away from <span
+class="math inline">\(x_{\text{pred}}\)</span>, so the two parts are
+long and nearly opposite, and only their small difference moves the
+sample.</p>
+<figure>
+<img src="materials/pull_push_anchors.png"
+alt="Attraction and repulsion on three well-separated points in the toy (step 200, r = 0.3). Each black point is x_pred, the point the student’s parameters move. In MeanFlow it is the student’s prediction X[x_t, u_theta, r] from a state x_t, and in DMD it is the student’s jump to level r. Green arrows show the attraction toward x_pos, red arrows the repulsion away from x_neg, and black arrows their sum x_pos - x_neg, the actual update. The DMD update is drawn four times longer." />
+<figcaption aria-hidden="true">Attraction and repulsion on three
+well-separated points in the toy (step 200, r = 0.3). Each black point
+is x_pred, the point the student’s parameters move. In MeanFlow it is
+the student’s prediction X[x_t, u_theta, r] from a state x_t, and in DMD
+it is the student’s jump to level r. Green arrows show the attraction
+toward x_pos, red arrows the repulsion away from x_neg, and black arrows
+their sum x_pos - x_neg, the actual update. The DMD update is drawn four
+times longer.</figcaption>
+</figure>
+<p>Each method ties its negative to the moved point. In MeanFlow the tie
+is <span class="math inline">\(\mathrm{sg}(u_\theta)\)</span>, evaluated
+at the same state as the moved point. In DMD it is the renoised state
+<span class="math inline">\(x_{t&#39;}\)</span>, which is built from the
+sample. Without such a tie nothing pulls the update back toward zero,
+and Section 6 shows that MeanFlow diverges when its negative no longer
+contains the current student.</p>
+<h3 id="side-by-side">Side by side</h3>
+<table style="width:100%;">
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+<col style="width: 16%" />
+</colgroup>
+<thead>
+<tr>
+<th></th>
+<th>Moved point</th>
+<th><span class="math inline">\(x_{\text{pos}}\)</span></th>
+<th><span class="math inline">\(x_{\text{neg}}\)</span></th>
+<th>Built from</th>
+<th>Extra cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Simulation</td>
+<td><span class="math inline">\(X[x_t,u_\theta,r]\)</span></td>
+<td>simulated point <span class="math inline">\(\hat
+x^{\text{sim}}_r\)</span></td>
+<td><span class="math inline">\(\mathrm{sg}\)</span>(moved point)</td>
+<td><span class="math inline">\(x_t\)</span></td>
+<td>full ODE solve</td>
+</tr>
+<tr>
+<td>MeanFlow</td>
+<td><span class="math inline">\(X[x_t,u_\theta,r]\)</span></td>
+<td><span
+class="math inline">\(X[x_t,v_{\text{teacher}},r]\)</span></td>
+<td><span
+class="math inline">\(X[x_t,\mathrm{sg}(u_\theta)+J,r]\)</span></td>
+<td>the same <span class="math inline">\(x_t\)</span></td>
+<td>one JVP</td>
+</tr>
+<tr>
+<td>DMD</td>
+<td><span class="math inline">\(\hat x =
+G_\theta(\epsilon)\)</span></td>
+<td><span
+class="math inline">\(X[x_{t&#39;},v_{\text{teacher}},0]\)</span></td>
+<td><span class="math inline">\(X[x_{t&#39;},v_\phi,0]\)</span></td>
+<td>renoised sample <span class="math inline">\(x_{t&#39;}\)</span></td>
+<td>a second network</td>
+</tr>
+</tbody>
+</table>
+<h3 id="code">Code</h3>
+<p>The three constructions fit in a few lines of illustrative code. Here
+<code>sg</code> is the stop-gradient, <code>ode</code> integrates the
+teacher’s ODE from level <code>t</code> to level <code>r</code>,
+<code>u_theta</code> is the student’s output at <code>x_t</code>, and
+<code>J</code> is the MeanFlow derivative term. The moved point
+<code>y</code> passed to <code>pull_push</code> is
+<code>X(x_t, u_theta, t, r)</code> for the simulation and for MeanFlow,
+and <code>x_hat</code> for DMD.</p>
+<div class="sourceCode" id="cb1"><pre
+class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> pull_push(y, g, W<span class="op">=</span><span class="fl">1.0</span>):</span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a>    <span class="co">&quot;&quot;&quot;W |y - sg(y + g)|^2. The gradient on y is -2 W g, so descent moves y along g = x_pos - x_neg.&quot;&quot;&quot;</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> (W <span class="op">*</span> ((y <span class="op">-</span> (y <span class="op">+</span> g.detach()).detach()) <span class="op">**</span> <span class="dv">2</span>).<span class="bu">sum</span>(<span class="op">-</span><span class="dv">1</span>)).mean()</span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">def</span> X(x, v, t, r):</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="co"># X[x_t, v, r] in the text, with the start level t passed explicitly</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>    <span class="cf">return</span> x <span class="op">-</span> (t <span class="op">-</span> r) <span class="op">*</span> v</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co"># Simulation. The negative is the moved point itself.</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>g_sim <span class="op">=</span> ode(x_t, v_teacher, t, r) <span class="op">-</span> X(x_t, sg(u_theta), t, r)</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co"># MeanFlow. All points are built from x_t, and the negative is induced by the student.</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a>g_mf <span class="op">=</span> X(x_t, v_teacher(x_t, t), t, r) <span class="op">-</span> X(x_t, sg(u_theta) <span class="op">+</span> J, t, r)</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="co"># DMD. The points are built at the renoised sample, and the negative comes from the fake.</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>x_tp <span class="op">=</span> (<span class="dv">1</span> <span class="op">-</span> tp) <span class="op">*</span> sg(x_hat) <span class="op">+</span> tp <span class="op">*</span> eps_p</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>g_dmd <span class="op">=</span> X(x_tp, v_teacher(x_tp, tp), tp, <span class="dv">0</span>) <span class="op">-</span> X(x_tp, v_phi(x_tp, tp), tp, <span class="dv">0</span>)</span></code></pre></div>
+<hr />
+<h2 id="the-design-space">5. The design space</h2>
+<p>Once both methods are written as the same update, their ingredients
+can be varied independently. Three choices describe every variant in
+this post, and each corresponds to a pair of runs in the toy.</p>
+<h3 id="where-the-state-comes-from">Where the state comes from</h3>
+<ul>
+<li>Off-policy states <span class="math inline">\(x_t\)</span> are
+noised data. On-policy states are noised samples of the student’s own
+few-step sampler, that is, the states the sampler actually visits. At
+<span class="math inline">\(t=1\)</span> the two coincide, since both
+are pure noise.</li>
+<li>The original MeanFlow is off-policy because <span
+class="math inline">\(v_{\text{cond}}\)</span> needs the pair <span
+class="math inline">\((x_0,\epsilon)\)</span> that produced <span
+class="math inline">\(x_t\)</span>. On student samples that pair would
+come from the student’s own output, and the positive would carry no
+information about the data. With a teacher, the positive can be queried
+at any state, so on-policy MeanFlow is well defined.</li>
+<li>DMD is on-policy by construction, because its reverse KL is an
+expectation over the student’s samples. An off-policy variant moves the
+student’s jump from noised data instead. It still has the form of the
+pull-push gradient, but the reverse KL it minimizes is that of a
+different generator, namely the one-jump denoiser applied to noised
+data.</li>
+</ul>
+<h3 id="which-level-r">Which level r</h3>
+<ul>
+<li>With <span class="math inline">\(r=0\)</span> only, MeanFlow is a
+continuous-time consistency model. For <span
+class="math inline">\(f(x_t,t)=x_t - t\,u(x_t,t,0)\)</span>, the
+identity says that <span class="math inline">\(df/dt = 0\)</span> along
+trajectories (Appendix C; sCM, <a
+href="https://arxiv.org/abs/2410.11081">Lu &amp; Song, 2025</a>).</li>
+<li>With <span class="math inline">\(r\)</span> anywhere in <span
+class="math inline">\([0,t]\)</span>, MeanFlow trains the flow map
+between every pair of levels, which a <span
+class="math inline">\(K\)</span>-step sampler needs.</li>
+<li>DMD extends to intermediate levels as well. The moved point is then
+the student’s jump to level <span class="math inline">\(r\)</span> from
+a state <span class="math inline">\(x_t\)</span>, <span
+class="math inline">\(\hat x^\theta_r = X[x_t,u_\theta,r]\)</span>, and
+it is noised up to a level <span
+class="math inline">\(t&#39;&gt;r\)</span> with the kernel of the linear
+path,</li>
+</ul>
+<p><span class="math display">\[
+x_{t&#39;} = a\,\hat x^\theta_r + b\,\epsilon&#39;,\qquad a =
+\frac{1-t&#39;}{1-r},\qquad b^2 = t&#39;^2 - a^2 r^2,
+\]</span></p>
+<p>which maps the data’s level-<span class="math inline">\(r\)</span>
+marginal <span class="math inline">\(p_{\text{data},r}\)</span> exactly
+onto <span class="math inline">\(p_{\text{data},t&#39;}\)</span>. The
+teacher’s velocity at <span class="math inline">\(x_{t&#39;}\)</span> is
+therefore still the right one. The positive and the negative are the
+teacher’s and the fake’s estimates of the posterior mean of the
+level-<span class="math inline">\(r\)</span> point given <span
+class="math inline">\(x_{t&#39;}\)</span>, which Tweedie’s formula
+computes from the score of the noised distribution (Appendix E). The
+fake is now also conditioned on <span class="math inline">\(r\)</span>,
+because the distribution <span
+class="math inline">\(p_{\theta,r}\)</span> of the student’s level-<span
+class="math inline">\(r\)</span> points depends on <span
+class="math inline">\(r\)</span>. At <span
+class="math inline">\(r=0\)</span> this is ordinary DMD.</p>
+<h3 id="how-the-students-instantaneous-velocity-is-obtained">How the
+student’s instantaneous velocity is obtained</h3>
+<p>Only this choice separates MeanFlow-like methods from DMD-like ones,
+and it decides two things.</p>
+<ul>
+<li>The cost is one JVP for the intrinsic velocity, and a second network
+that has to keep up with the student for the extrinsic one.</li>
+<li>It also decides what is matched at convergence. With the intrinsic
+velocity, the negative contains the student’s own prediction at the same
+state as the positive. Each <span
+class="math inline">\((x_t,t,r)\)</span> then has its own fixed point,
+where the MeanFlow identity holds, and the student converges to the
+teacher’s flow maps, a trajectory-level match. With the extrinsic
+velocity, the negative does not depend on the student’s prediction at
+any given state, because <span class="math inline">\(v_\phi\)</span>
+responds only to the distribution of the samples. The points must then
+be built at the noised sample, and the fixed point is <span
+class="math inline">\(p_{\theta,0} = p_{\text{data}}\)</span>, a
+distribution-level match. Nothing ties a given noise <span
+class="math inline">\(\epsilon\)</span> to the sample the teacher would
+produce from it.</li>
+</ul>
+<p>Published methods also combine the two, for example continuous-time
+consistency distillation with an added DMD term (<a
+href="https://arxiv.org/abs/2510.08431">Zheng et al., 2025</a>).</p>
+<hr />
+<h2 id="toy-experiments">6. Toy experiments</h2>
+<p><strong>Setup.</strong> The data are two moons with noise standard
+deviation 0.05, standardized with one isotropic scale. The teacher is a
+4×256 MLP trained by flow matching. Every student is an average-velocity
+network <span class="math inline">\(u_\theta(x,t,r)\)</span> of the same
+shape, initialized from the teacher so that <span
+class="math inline">\(u_\theta = v_{\text{teacher}}\)</span> at step 0.
+The DMD fake also starts as the teacher, so at step 0 its negative
+equals its positive. Each training step draws one sampler depth <span
+class="math inline">\(K\in\{1,2\}\)</span>, used for both the fake’s and
+the student’s samples, and DMD makes five fake updates per student
+update. These are small CPU runs (3000 student steps, batch 256, three
+seeds, a lightly trained teacher), so the numbers should be read as
+qualitative.</p>
+<p>We report three metrics. The first is SW2, the sliced 2-Wasserstein
+distance to held-out data. The second is the <strong>coupling
+error</strong> <span class="math inline">\(\mathbb E\|G_\theta(\epsilon)
+- \text{ODE}(\epsilon, v_{\text{teacher}}, 1\to 0)\|^2\)</span>, which
+measures whether the student sends each noise where the teacher’s ODE
+would. The third is the reverse and forward KL divergence to held-out
+data, estimated with 5 nearest neighbours (<a
+href="https://doi.org/10.1109/TIT.2009.2016060">Wang et al.,
+2009</a>).</p>
+<table>
+<colgroup>
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+<col style="width: 20%" />
+</colgroup>
+<thead>
+<tr>
+<th>Setup</th>
+<th>SW2, 1 step</th>
+<th>Coupling, 1 step</th>
+<th>KL(student‖data), 1 step</th>
+<th>KL(student‖data), 2 steps</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 DMD, on-policy, <span class="math inline">\(r=0\)</span></td>
+<td><strong>0.072</strong></td>
+<td>1.26</td>
+<td><strong>0.45</strong></td>
+<td>0.50</td>
+</tr>
+<tr>
+<td>2 MeanFlow, on-policy, <span class="math inline">\(r=0\)</span></td>
+<td>0.099</td>
+<td>0.060</td>
+<td>1.12</td>
+<td>1.68</td>
+</tr>
+<tr>
+<td>3 DMD, off-policy, <span class="math inline">\(r=0\)</span></td>
+<td>0.246</td>
+<td>2.52</td>
+<td>1.07</td>
+<td>0.51</td>
+</tr>
+<tr>
+<td>4 MeanFlow, off-policy, <span
+class="math inline">\(r=0\)</span></td>
+<td>0.088</td>
+<td>0.051</td>
+<td>0.84</td>
+<td>1.37</td>
+</tr>
+<tr>
+<td>5 DMD, on-policy, <span class="math inline">\(r\)</span> random</td>
+<td>0.093</td>
+<td>0.66</td>
+<td>0.51</td>
+<td><strong>0.48</strong></td>
+</tr>
+<tr>
+<td>6 MeanFlow, on-policy, <span class="math inline">\(r\)</span>
+random</td>
+<td>0.080</td>
+<td><strong>0.037</strong></td>
+<td>0.95</td>
+<td>0.76</td>
+</tr>
+</tbody>
+</table>
+<p>Means over three seeds, with SW2 and KL measured against held-out
+data. Measured between two sets of data samples, SW2 is 0.04 and KL is
+about 0.</p>
+<figure>
+<img src="materials/samples_k1.gif"
+alt="One-step samples over training for the six setups, with reverse and forward KL to the data." />
+<figcaption aria-hidden="true">One-step samples over training for the
+six setups, with reverse and forward KL to the data.</figcaption>
+</figure>
+<p><strong>Distributions versus trajectories.</strong> On SW2 the two
+families look alike. On KL, on-policy DMD is clearly best. Its samples
+sit tightly on the thin moons, while MeanFlow’s are blurrier, and the
+reverse KL penalizes all mass off the moons. The coupling error reverses
+the ranking by a factor of 20 to 50. MeanFlow students send each noise
+almost exactly where the teacher’s ODE does, while DMD students produce
+good samples from the wrong noises. This is the difference between an
+intrinsic and an extrinsic negative described in Section 5, with one
+fixed point per flow map in MeanFlow and one fixed point for the whole
+distribution in DMD.</p>
+<p><strong>The student term in MeanFlow’s negative.</strong> We ran two
+ablations of on-policy MeanFlow at <span
+class="math inline">\(r=0\)</span>, keeping everything else fixed.</p>
+<ul>
+<li>Replacing <span class="math inline">\(\mathrm{sg}(u_\theta)\)</span>
+in the negative by a frozen copy of the initial student, while keeping
+the current <span class="math inline">\(J\)</span>, makes training
+diverge within a few hundred steps (one-step SW2 above 50).</li>
+<li>Keeping <span class="math inline">\(\mathrm{sg}(u_\theta)\)</span>
+but dropping <span class="math inline">\(J\)</span> gives perfectly
+stable training that learns nothing. Positive and negative coincide at
+the teacher-initialized start, and the student stays at the tangent
+point.</li>
+</ul>
+<p>The student term in the negative therefore keeps training stable, and
+<span class="math inline">\(J\)</span> carries the learning signal.
+DMD’s negative does not contain the student, and DMD stays stable
+because its points are built at a noised copy of the sample, which moves
+with the sample.</p>
+<p>The animation below follows the attraction and the repulsion on three
+fixed points through training. At step 0 the two methods start
+differently. In MeanFlow the student’s prediction equals the teacher’s
+tangent point, so <span class="math inline">\(x_{\text{pred}}\)</span>
+sits on <span class="math inline">\(x_{\text{pos}}\)</span> and only the
+repulsion from the student’s own tangent point acts. In DMD the fake is
+still a copy of the teacher, so <span
+class="math inline">\(x_{\text{pos}} = x_{\text{neg}}\)</span>.
+Attraction and repulsion are then equal and opposite, and the update is
+zero until the fake has fitted the student’s samples. Later in training,
+MeanFlow’s two parts stay short and its update keeps a sizable
+magnitude, while DMD’s parts stay long and nearly cancel, leaving a
+small net update.</p>
+<figure>
+<img src="materials/directions.gif"
+alt="Attraction toward x_pos (green), repulsion away from x_neg (red) and their sum, the update x_pos - x_neg (black), on three fixed points during training, for MeanFlow and DMD at r = 0.3. The DMD update is drawn eleven times longer." />
+<figcaption aria-hidden="true">Attraction toward x_pos (green),
+repulsion away from x_neg (red) and their sum, the update x_pos - x_neg
+(black), on three fixed points during training, for MeanFlow and DMD at
+r = 0.3. The DMD update is drawn eleven times longer.</figcaption>
+</figure>
+<p><strong>On-policy versus off-policy states.</strong> For DMD,
+on-policy states are much better at one step (KL 0.45 vs 1.07, SW2 0.072
+vs 0.246), and the two are close at two steps. For MeanFlow, off-policy
+states were slightly better here on every metric. The effect of the
+state source is smaller than we expected and does not uniformly favor
+on-policy states.</p>
+<p><strong>Level <span class="math inline">\(r\)</span>.</strong>
+Training DMD at every level roughly halves its coupling error (0.66 vs
+1.26) at similar sample quality, because matching the intermediate
+marginals constrains the student’s flow maps more than matching the
+clean end alone. The coupling error still stays an order of magnitude
+above MeanFlow’s, which is expected for a distribution-level
+objective.</p>
+<figure>
+<img src="materials/samples_k2.gif"
+alt="Two-step samples over training." />
+<figcaption aria-hidden="true">Two-step samples over
+training.</figcaption>
+</figure>
+<hr />
+<p>This is a simple experiment, but it shows that the two methods are
+consistent with each other. Written as the same pull-push update, both
+turn the teacher into a working one- and two-step generator, and they
+differ in what they match, the distribution or the trajectories, exactly
+where their negatives differ. The design also has several independent
+choices, namely where the state comes from, which level <span
+class="math inline">\(r\)</span> is trained, how the negative is
+obtained, and where the points are built. Every combination we tried,
+including ones that no published method uses, gives an effective
+few-step generator. These are small CPU runs on 2D data, so image-scale
+behavior may differ.</p>
+<hr />
+<h2 id="extension-drifting-models">7. Extension: Drifting models</h2>
+<p>Drifting models (<a href="https://arxiv.org/abs/2602.04770">Deng et
+al., 2026</a>) train a one-step generator <span
+class="math inline">\(\hat x = G_\theta(\epsilon)\)</span> without any
+teacher. Each generated sample is moved by a <em>drift field</em> built
+from two sets of samples, the positives <span
+class="math inline">\(y^+_j\)</span>, which are a batch of data, and the
+negatives <span class="math inline">\(y^-_j\)</span>, which are a batch
+of generated samples. In practice the negatives are the current batch
+itself, with each sample excluded from its own set. With a kernel <span
+class="math inline">\(k(x,y) = \exp(-\|x-y\|/\tau)\)</span> at
+temperature <span class="math inline">\(\tau\)</span>, normalized over
+<span class="math inline">\(y\)</span> by a softmax, the two points and
+the drift are</p>
+<p><span class="math display">\[
+x_{\text{pos}} = \frac{\sum_j k(\hat x,y^+_j)\,y^+_j}{\sum_j k(\hat
+x,y^+_j)},\qquad
+x_{\text{neg}} = \frac{\sum_j k(\hat x,y^-_j)\,y^-_j}{\sum_j k(\hat
+x,y^-_j)},\qquad
+V(\hat x) = x_{\text{pos}} - x_{\text{neg}},
+\]</span></p>
+<p>and the loss is <span class="math inline">\(\|\hat x -
+\mathrm{sg}(\hat x + V(\hat x))\|^2\)</span> (their Eqs. 6, 8 to 10 and
+12). This is the pull-push gradient with <span class="math inline">\(W =
+1\)</span>. Each sample is pulled toward the kernel mean of the data
+around it and pushed away from the kernel mean of the generator’s own
+samples around it. Their Algorithm 2 adds a second softmax over the
+batch of generated samples and uses the geometric mean of the two
+normalizations as the kernel weights. This gives <span
+class="math inline">\(V = s^+ s^-(x_{\text{pos}} -
+x_{\text{neg}})\)</span>, where <span class="math inline">\(s^+\)</span>
+and <span class="math inline">\(s^-\)</span> are the total weights that
+a sample places on the positives and on the negatives, and <span
+class="math inline">\(x_{\text{pos}}\)</span> and <span
+class="math inline">\(x_{\text{neg}}\)</span> are the means under these
+weights. This corresponds to the per-sample weight <span
+class="math inline">\(W = s^+ s^-\)</span>. The algorithm also sums
+<span class="math inline">\(V\)</span> over several temperatures and
+normalizes the feature scale and the drift magnitude.</p>
+<p><strong>The two points as posterior means.</strong> In flow matching,
+DMD’s positive and negative are estimates of the posterior mean of <span
+class="math inline">\(x_0\)</span> given <span
+class="math inline">\(x_t\)</span>, under the data and under the student
+(Appendix B). We write them <span class="math inline">\(\mathbb
+E_{\text{data}}[x_0\mid x_t]\)</span> and <span
+class="math inline">\(\mathbb E_\theta[x_0\mid x_t]\)</span>. When the
+clean distribution is the empirical distribution of a finite set of
+samples <span class="math inline">\(\{y_j\}\)</span>, the posterior mean
+has a closed form. Since <span class="math inline">\(x_t\)</span> given
+<span class="math inline">\(x_0\)</span> is distributed as <span
+class="math inline">\(\mathcal N\big((1-t)\,x_0,\ t^2
+I\big)\)</span>,</p>
+<p><span class="math display">\[
+\mathbb E[x_0\mid x_t] = \frac{\sum_j k_t(x_t,y_j)\,y_j}{\sum_j
+k_t(x_t,y_j)},\qquad k_t(x_t,y) =
+\exp\!\Big(-\frac{\|x_t-(1-t)\,y\|^2}{2t^2}\Big),
+\]</span></p>
+<p>a kernel-weighted mean of the samples. The teacher and the fake are
+networks that amortize this average, over the data and over the
+student’s samples respectively. A drifting model computes a similar
+average directly from the samples in the batch, with its own kernel and
+at the sample itself, and its temperature <span
+class="math inline">\(\tau\)</span> plays the role of the noise level
+<span class="math inline">\(t\)</span>. The drift field is therefore
+another way to build the positive and the negative as posterior means.
+DMD learns them with networks, a teacher and a fake, while the drifting
+model estimates them non-parametrically, by a kernel density estimate of
+each distribution around the sample followed by its mean. As in DMD,
+both points are statistics of distributions rather than of one
+trajectory, and <span class="math inline">\(V\)</span> vanishes when
+<span class="math inline">\(p_{\theta,0} = p_{\text{data}}\)</span>,
+which is a distribution-level match.</p>
+<p><strong>Three variants built from samples.</strong> The drifting
+model builds its points non-parametrically and with a Laplacian kernel,
+whereas the posterior mean under flow matching uses the Gaussian kernel
+<span class="math inline">\(k_t\)</span> above. A non-parametric
+estimate also depends on the number of samples <span
+class="math inline">\(N\)</span> behind it. We therefore compare three
+variants that differ in the kernel and in where the positive comes from.
+All of them use the setup of Section 6 (teacher-initialized student,
+one- and two-step samplers, 3000 steps, three seeds), and only <span
+class="math inline">\(N\)</span> varies.</p>
+<ul>
+<li><em>Native drift</em> is the drifting model as published, following
+the paper’s Algorithm 2 with the temperatures 0.02, 0.05 and 0.2 summed
+and both normalizations. Each step generates <span
+class="math inline">\(N\)</span> samples, which also serve as the
+negatives, and draws <span class="math inline">\(N\)</span> data points
+as positives. The teacher is not called after initialization, and there
+is no fake.</li>
+<li><em>FM-ideal drift</em> is the same, with the Laplacian kernel
+replaced by the Gaussian kernel <span
+class="math inline">\(\exp(-\|x-y\|^2/2\tau^2)\)</span> at the same
+temperatures, still evaluated at the sample itself.</li>
+<li><em>Semi-drift</em> is DMD exactly as in Section 6, with the
+teacher’s estimate <span class="math inline">\(\mathbb
+E_{\text{data}}[x_0\mid x_{t&#39;}]\)</span> at the renoised sample as
+the positive. The fake is replaced by the Gaussian-kernel mean with
+<span class="math inline">\(k_{t&#39;}\)</span> over the <span
+class="math inline">\(N\)</span> samples of the batch, and each query
+excludes the sample it was noised from. No auxiliary network is
+trained.</li>
+</ul>
+<p>When the batch is taken as the student’s distribution, the
+flow-matching kernel is Gaussian (Appendix G). This is why the last two
+variants use a Gaussian kernel, and it is where the name FM-ideal comes
+from.</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+<col style="width: 25%" />
+</colgroup>
+<thead>
+<tr>
+<th><span class="math inline">\(N\)</span></th>
+<th>Native drift (Laplacian)</th>
+<th>FM-ideal drift (Gaussian)</th>
+<th>Semi-drift (teacher + Gaussian)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2</td>
+<td>9.3 / 79 (diverged)</td>
+<td>9.2 / 76 (diverged)</td>
+<td>9.2 / 217 (diverged)</td>
+</tr>
+<tr>
+<td>4</td>
+<td>1.95 / 0.170</td>
+<td>1.90 / 0.170</td>
+<td>5.0 / 4.3 (collapsed)</td>
+</tr>
+<tr>
+<td>8</td>
+<td>1.16 / 0.103</td>
+<td>1.26 / 0.114</td>
+<td>2.99 / 0.655</td>
+</tr>
+<tr>
+<td>16</td>
+<td>0.83 / 0.083</td>
+<td>0.88 / 0.130</td>
+<td>1.86 / 0.259</td>
+</tr>
+<tr>
+<td>64</td>
+<td>0.40 / 0.063</td>
+<td>0.41 / 0.064</td>
+<td>0.77 / 0.110</td>
+</tr>
+<tr>
+<td>256</td>
+<td>0.39 / 0.053</td>
+<td>0.29 / 0.047</td>
+<td><strong>0.39</strong> / 0.085</td>
+</tr>
+<tr>
+<td>1024</td>
+<td>0.28 / 0.052</td>
+<td><strong>0.25 / 0.041</strong></td>
+<td>0.51 / 0.059</td>
+</tr>
+</tbody>
+</table>
+<p>Each cell gives the one-step KL(student‖data) followed by the
+one-step SW2, as means over three seeds measured as in Section 6. For
+comparison, on-policy DMD with a trained fake reaches a one-step KL of
+0.45, and MeanFlow reaches 1.12.</p>
+<figure>
+<img src="materials/kl_vs_n_drift_drift_gauss_kneg.png"
+alt="Final KL to the data against the number of samples N behind the kernel estimates, with on-policy DMD and MeanFlow at r = 0 for reference. From left to right, one ingredient changes at a time. (a) Native drift, where both points are Laplacian-kernel means over samples, taken at the sample itself. (b) FM-ideal drift, the same with a Gaussian kernel. (c) Semi-drift, where the positive comes from the teacher and the negative is a Gaussian-kernel mean over N generated samples, both built at a noised copy of the sample." />
+<figcaption aria-hidden="true">Final KL to the data against the number
+of samples N behind the kernel estimates, with on-policy DMD and
+MeanFlow at r = 0 for reference. From left to right, one ingredient
+changes at a time. (a) Native drift, where both points are
+Laplacian-kernel means over samples, taken at the sample itself. (b)
+FM-ideal drift, the same with a Gaussian kernel. (c) Semi-drift, where
+the positive comes from the teacher and the negative is a
+Gaussian-kernel mean over N generated samples, both built at a noised
+copy of the sample.</figcaption>
+</figure>
+<figure>
+<img src="materials/kernel_samples.gif"
+alt="One-step samples over training for the three variants (rows) and N = 2 to 1024 (columns), with each variant’s reverse KL to the data." />
+<figcaption aria-hidden="true">One-step samples over training for the
+three variants (rows) and N = 2 to 1024 (columns), with each variant’s
+reverse KL to the data.</figcaption>
+</figure>
+<p>The three variants behave consistently.</p>
+<ul>
+<li>All three need enough samples. With <span class="math inline">\(N
+\ge 256\)</span>, every variant matches the distribution as well as DMD
+with a trained fake or better, with best one-step KL 0.28 (native
+drift), 0.25 (FM-ideal drift) and 0.39 (semi-drift), against 0.45. With
+fewer samples (native and FM-ideal drift at <span
+class="math inline">\(N\)</span> = 4 to 16, semi-drift at <span
+class="math inline">\(N\)</span> = 8 to 16), training is stable but
+stalls at blurred moons, because <span
+class="math inline">\(x_{\text{pos}}\)</span> and <span
+class="math inline">\(x_{\text{neg}}\)</span> average only a handful of
+points and give a noisy, biased direction.</li>
+<li>All three collapse at the smallest <span
+class="math inline">\(N\)</span>. At <span class="math inline">\(N =
+2\)</span>, every variant breaks down in every seed and the samples
+scatter far from the data. The negative is then the one other generated
+sample, and in the drifting variants the positive is essentially one
+random data point, so the update carries information about single points
+rather than about the distributions. In the drifting variants, the drift
+normalization also keeps the average step at unit size however poor its
+direction is.</li>
+</ul>
+<figure>
+<img src="materials/drift_directions.gif"
+alt="Native drift on three fixed one-step samples x_pred (black), with positives (blue, N data samples), negatives (orange, N generated samples), their kernel means x_pos (green) and x_neg (red) at temperature 0.2, and the update x_pos - x_neg (black, drawn six times longer), for N = 256, 8 and 2. At N = 256 both means sit close to the sample and the update is a small local correction. At N = 8 each mean is pulled to one or two neighbours. At N = 2 the samples move far from the data and the view has to zoom out." />
+<figcaption aria-hidden="true">Native drift on three fixed one-step
+samples x_pred (black), with positives (blue, N data samples), negatives
+(orange, N generated samples), their kernel means x_pos (green) and
+x_neg (red) at temperature 0.2, and the update x_pos - x_neg (black,
+drawn six times longer), for N = 256, 8 and 2. At N = 256 both means sit
+close to the sample and the update is a small local correction. At N = 8
+each mean is pulled to one or two neighbours. At N = 2 the samples move
+far from the data and the view has to zoom out.</figcaption>
+</figure>
+<p><strong>High dimensions.</strong> In 2D a few dozen samples cover the
+two moons, so kernel means are good estimates. In image space they are
+not, because the number of samples a kernel estimate needs grows
+exponentially with the dimension. The drifting paper reflects this. Its
+ImageNet models generate in a 4096-dimensional autoencoder latent space
+(32×32×4), yet each kernel estimate uses only 64 generated samples and
+64 to 128 data samples from one class. The kernel means are not computed
+on the latents but in the feature space of a pre-trained self-supervised
+encoder, and the authors report that the method does not work on
+ImageNet without that encoder. Their ablation also shows the dependence
+on the number of samples. With one positive per class instead of 64, the
+Fréchet Inception Distance (FID, lower is better) rises from 8.46 to
+20.43, and with 8 positives and 8 negatives per class instead of 64
+each, it rises to 11.82. Semi-drift cannot use the same remedy, because
+its Gaussian kernel comes from the noising process in data space. At
+image scale, DMD’s learned fake therefore remains the practical way to
+build the negative.</p>
+<hr />
+<h2 id="conclusion">8. Conclusion</h2>
+<p>How the positive and the negative are built is the central design
+choice in training a few-step generator. The pull-push gradient fixes
+the rest of the update, and MeanFlow, DMD and drifting models differ
+only in what the two points are.</p>
+<p>When both points are statistics of distributions, namely estimates of
+the posterior mean of <span class="math inline">\(x_0\)</span> under the
+data and under the generator, the fixed point is a match of
+distributions rather than a pointwise match of each sample or flow map.
+These estimates can come from networks (DMD’s teacher and fake), from
+kernel averages over samples (drifting models), or from a mix of the two
+(semi-drift). MeanFlow, whose negative is tied to the student’s
+prediction at one state, matches trajectories instead.</p>
+<p>When the two points do not carry enough information about the
+direction to move, training breaks down. Examples are the MeanFlow
+ablation whose negative no longer contains the student, and the kernel
+estimates with too few samples, both in the drifting models and in
+semi-drift.</p>
+<p>Non-parametric estimates do not scale for free. In 2D a few dozen
+samples suffice, but in image space a kernel estimate needs far more
+samples or a learned feature space, so a learned network remains the
+efficient way to build the points.</p>
+<hr />
+<h2 id="appendix">Appendix</h2>
+<details>
+<summary>
+A. The MeanFlow identity
+</summary>
+Start from <span class="math inline">\((t-r)\,u(x_t,t,r) = \int_r^t
+v(x_s,s)\,ds\)</span> and differentiate in <span
+class="math inline">\(t\)</span> along the trajectory through <span
+class="math inline">\(x_t\)</span>. The left side gives <span
+class="math inline">\(u + (t-r)\frac{d}{dt}u\)</span> and the right side
+gives <span class="math inline">\(v(x_t,t)\)</span>. Hence <span
+class="math inline">\(u = v - (t-r)\frac{d}{dt}u\)</span> with <span
+class="math inline">\(\frac{d}{dt}u = \partial_t u + (\partial_x
+u)\,v\)</span>. At <span class="math inline">\(r=t\)</span> the identity
+reduces to <span class="math inline">\(u(x_t,t,t)=v(x_t,t)\)</span>.
+</details>
+<details>
+<summary>
+B. Scores and velocities
+</summary>
+<p>Take <span class="math inline">\(x_t=(1-t)x_0+t\epsilon\)</span> for
+any clean distribution, and let <span class="math inline">\(p_t\)</span>
+be the distribution of <span class="math inline">\(x_t\)</span> and
+<span class="math inline">\(v\)</span> its marginal velocity. Since
+<span class="math inline">\(x_t\)</span> given <span
+class="math inline">\(x_0\)</span> is Gaussian, Tweedie’s formula gives
+<span class="math inline">\(\nabla\log p_t(x_t) = -\mathbb
+E[\epsilon\mid x_t]/t\)</span>. Taking conditional expectations of <span
+class="math inline">\(x_t=(1-t)x_0+t\epsilon\)</span> and of <span
+class="math inline">\(\epsilon - x_0\)</span> gives <span
+class="math inline">\(x_t = (1-t)\,\mathbb E[x_0\mid x_t] + t\,\mathbb
+E[\epsilon\mid x_t]\)</span> and <span class="math inline">\(v = \mathbb
+E[\epsilon\mid x_t]-\mathbb E[x_0\mid x_t]\)</span>. Hence <span
+class="math inline">\(\mathbb E[\epsilon\mid x_t] = x_t +
+(1-t)v\)</span> and <span class="math inline">\(\mathbb E[x_0\mid x_t] =
+x_t - t\,v = X[x_t,v,0]\)</span>.</p>
+Applied to the student and to the data, with scores <span
+class="math inline">\(s_\theta=\nabla\log p_{\theta,t}\)</span> and
+<span class="math inline">\(s_{\text{data}}=\nabla\log
+p_{\text{data},t}\)</span> and velocities <span
+class="math inline">\(v_\phi\)</span> and <span
+class="math inline">\(v_{\text{teacher}}\)</span>, this gives <span
+class="math inline">\(s_\theta - s_{\text{data}} =
+w_t\,(v_{\text{teacher}} - v_\phi)\)</span> with <span
+class="math inline">\(w_t=(1-t)/t\)</span>. The order of the two fields
+flips when scores are written as velocities. The reverse-KL gradient for
+a renoised sample is <span class="math inline">\(\mathbb E[(s_\theta -
+s_{\text{data}})(x_{t&#39;})^\top \partial
+x_{t&#39;}/\partial\theta]\)</span>. With <span
+class="math inline">\(\partial x_{t&#39;}/\partial\theta =
+(1-t&#39;)\,\partial\hat x/\partial\theta\)</span>, it becomes the DMD
+gradient of Section 3, with the factor <span
+class="math inline">\((1-t&#39;)\)</span> absorbed into the weight.
+</details>
+<details>
+<summary>
+C. r = 0 is the consistency condition
+</summary>
+Let <span class="math inline">\(f(x_t,t) = x_t - t\,u(x_t,t,0)\)</span>.
+Along a trajectory, <span class="math inline">\(\frac{df}{dt} = v - u -
+t\frac{d}{dt}u\)</span>, which vanishes exactly when the MeanFlow
+identity holds at <span class="math inline">\(r=0\)</span>. Then <span
+class="math inline">\(f\)</span> is constant along every trajectory. A
+function with this property is called a consistency function, and it is
+what consistency models learn.
+</details>
+<details>
+<summary>
+D. Velocity error and point distance
+</summary>
+For two velocities <span class="math inline">\(v_1\)</span> and <span
+class="math inline">\(v_2\)</span>, <span
+class="math inline">\(X[x_t,v_1,r]-X[x_t,v_2,r] =
+-(t-r)(v_1-v_2)\)</span>, so <span class="math inline">\(\|v_1-v_2\|^2 =
+\|X[x_t,v_1,r]-X[x_t,v_2,r]\|^2/(t-r)^2\)</span>. The toy trains with
+the velocity form. It has the same gradient as the point form with <span
+class="math inline">\(W=1/(t-r)^2\)</span> and stays finite at <span
+class="math inline">\(r=t\)</span>.
+</details>
+<details>
+<summary>
+E. DMD at level r
+</summary>
+Let <span class="math inline">\(p_{\theta,r}\)</span> be the
+distribution of the student’s level-<span
+class="math inline">\(r\)</span> points <span class="math inline">\(\hat
+x^\theta_r\)</span>, and <span
+class="math inline">\(p_{\text{data},r}\)</span> the data’s level-<span
+class="math inline">\(r\)</span> marginal. For <span
+class="math inline">\(r=0\)</span> these are the distributions of
+Section 3. The kernel <span class="math inline">\(x_{t&#39;} = a\,x_r +
+b\,\epsilon&#39;\)</span> with <span
+class="math inline">\(a=(1-t&#39;)/(1-r)\)</span> and <span
+class="math inline">\(b^2 = t&#39;^2 - a^2r^2\)</span> maps <span
+class="math inline">\(p_{\text{data},r}\)</span> to <span
+class="math inline">\(p_{\text{data},t&#39;}\)</span>, because <span
+class="math inline">\(a(1-r) = 1-t&#39;\)</span> and <span
+class="math inline">\(a^2r^2+b^2 = t&#39;^2\)</span>. Tweedie’s formula
+expresses a posterior mean under Gaussian noise through the score of the
+noised distribution. For this kernel it gives <span
+class="math inline">\(\mathbb E[x_r\mid x_{t&#39;}] = \big(x_{t&#39;} +
+b^2\,s(x_{t&#39;})\big)/a\)</span>, where <span
+class="math inline">\(s\)</span> is the score of the distribution of
+<span class="math inline">\(x_{t&#39;}\)</span>. For the data, <span
+class="math inline">\(s = s_{\text{data}}\)</span> follows from the
+teacher’s velocity by Appendix B. The fake, conditioned on <span
+class="math inline">\(r\)</span>, is fitted by denoising score matching
+on the student’s pairs <span class="math inline">\((\hat x^\theta_r,
+x_{t&#39;})\)</span>. With <span
+class="math inline">\(p_{\theta,t&#39;}\)</span> the distribution of
+<span class="math inline">\(x_{t&#39;}\)</span> built from the student’s
+points, the gradient of <span
+class="math inline">\(\mathrm{KL}(p_{\theta,t&#39;}\,\|\,p_{\text{data},t&#39;})\)</span>
+with respect to the moved point is <span
+class="math inline">\(a\,(s_\theta -
+s_{\text{data}})(x_{t&#39;})\)</span>, which is proportional to <span
+class="math inline">\(x_{\text{neg}} - x_{\text{pos}}\)</span>.
+Descending it pulls <span class="math inline">\(\hat x^\theta_r\)</span>
+toward the teacher’s estimate and away from the fake’s.
+</details>
+<details>
+<summary>
+F. Toy details
+</summary>
+<ul>
+<li>The data are two moons with noise standard deviation 0.05 and one
+isotropic standardization. Teacher and students are 4×256 SiLU MLPs with
+a 33-dimensional Fourier time embedding, made of <span
+class="math inline">\(t\)</span> and 16 sine and cosine pairs with
+frequencies between <span class="math inline">\(\pi\)</span> and <span
+class="math inline">\(16\pi\)</span>.</li>
+<li>Each student is initialized with the teacher’s weights, with the
+input columns for <span class="math inline">\(r\)</span> set to zero, so
+that <span
+class="math inline">\(u_\theta(x,t,r)=v_{\text{teacher}}(x,t)\)</span>.</li>
+<li>Training uses Adam with learning rate <span
+class="math inline">\(10^{-4}\)</span> and cosine decay, gradient
+clipping at 1, and an exponential moving average (EMA) of the weights
+with decay 0.999 for evaluation. The DMD fake uses learning rate <span
+class="math inline">\(3\times10^{-4}\)</span> and takes five steps per
+student step on fresh samples.</li>
+<li>SW2 uses random projections. The coupling error is computed on a
+fixed set of noises against the teacher’s RK4 endpoints. The KL
+estimator uses 5 nearest neighbours.</li>
+</ul>
+</details>
+<details>
+<summary>
+G. The Gaussian kernel of semi-drift, and how it relates to drifting
+models
+</summary>
+<p><strong>The negative as a denoiser.</strong> At <span
+class="math inline">\(r=0\)</span>, DMD renoises the student’s sample,
+<span class="math inline">\(x_{t&#39;} = (1-t&#39;)\,x_{\text{pred}} +
+t&#39;\epsilon&#39;\)</span>, and builds its negative as <span
+class="math inline">\(\mathbb E_\theta[x_0\mid x_{t&#39;}]\)</span>, the
+posterior mean of a clean point under the student’s distribution <span
+class="math inline">\(p_{\theta,0}\)</span>. The fake network learns
+this posterior mean by denoising score matching on the student’s
+samples.</p>
+<p><strong>Replacing the student’s distribution by samples.</strong>
+Take <span class="math inline">\(N\)</span> samples <span
+class="math inline">\(y_1,\dots,y_N\)</span> of the student and use
+their empirical distribution <span class="math inline">\(\hat
+p_{\theta,N} = \frac1N\sum_j \delta_{y_j}\)</span> as the student’s
+distribution. Noising it with the forward process of flow matching gives
+a mixture of Gaussians, which is a Gaussian kernel density estimate of
+<span class="math inline">\(p_{\theta,0}\)</span> rescaled by <span
+class="math inline">\(1-t\)</span>,</p>
+<p><span class="math display">\[
+\hat p_{\theta,N,t}(x) = \frac1N\sum_j \mathcal N\big(x;\ (1-t)\,y_j,\
+t^2 I\big).
+\]</span></p>
+<p>Bayes’ rule over the mixture components, or equivalently Tweedie’s
+formula <span class="math inline">\(\mathbb E_\theta[x_0\mid x_t] =
+\big(x_t + t^2\nabla\log\hat p_{\theta,N,t}(x_t)\big)/(1-t)\)</span>,
+gives the posterior mean exactly as the kernel-weighted mean of Section
+7, with the Gaussian kernel <span class="math inline">\(k_t(x_t,y) =
+\exp\big(-\|x_t-(1-t)y\|^2/2t^2\big)\)</span>. This kernel is fixed by
+the forward process, since it is the likelihood of <span
+class="math inline">\(x_t\)</span> given <span
+class="math inline">\(x_0\)</span>, and Gaussian noise gives a Gaussian
+kernel. For a level <span class="math inline">\(r&gt;0\)</span>, the
+same steps with <span class="math inline">\(x_{t&#39;} = a\,x_r +
+b\,\epsilon&#39;\)</span> give the kernel <span
+class="math inline">\(\exp\big(-\|x_{t&#39;} -
+a\,y\|^2/2b^2\big)\)</span>. The kernel mean is also the exact minimizer
+of the denoising loss over these <span class="math inline">\(N\)</span>
+samples. It is the fake one would obtain by training it to convergence
+on this batch alone, and the trained network is a smoothed version of
+it, amortized over many batches.</p>
+<p><strong>Leaving the sample itself out.</strong> <span
+class="math inline">\(x_{t&#39;}\)</span> is a noised copy of one of the
+samples, say <span class="math inline">\(y_i\)</span>. If <span
+class="math inline">\(y_i\)</span> stays in the set, then at small <span
+class="math inline">\(t&#39;\)</span> the posterior concentrates on
+<span class="math inline">\(y_i\)</span>, so <span
+class="math inline">\(x_{\text{neg}} \to x_{\text{pred}}\)</span> and
+the update degenerates into plain regression toward the teacher’s
+posterior mean. A trained fake has not memorized the sample it is
+queried on, so we exclude <span class="math inline">\(y_i\)</span> from
+the estimate for query <span class="math inline">\(i\)</span>. This is a
+leave-one-out estimate, in the same way that drifting models exclude
+each sample from its own negatives.</p>
+<p><strong>Kernels and query points.</strong> The drift field only needs
+<span class="math inline">\(V = 0\)</span> when <span
+class="math inline">\(p_{\theta,0} = p_{\text{data}}\)</span>. This
+holds for any kernel, because the two kernel means then coincide, so the
+kernel is a free design choice, and Deng et al. use the Laplacian kernel
+<span class="math inline">\(\exp(-\|x-y\|/\tau)\)</span>. The drifting
+model also evaluates its kernel at the clean sample itself rather than
+at a noised copy. Its temperatures <span
+class="math inline">\(\tau\)</span> play the role of the noise levels
+that DMD samples, and both of its points are kernel means over equally
+many samples, data for the positive and generated samples for the
+negative. Semi-drift keeps everything from DMD except the fake. It
+queries at <span class="math inline">\(x_{t&#39;}\)</span> with the
+Gaussian kernel that the forward process dictates, and its positive
+still comes from the teacher. Native drift and semi-drift therefore each
+use the kernel that fits their construction. FM-ideal drift, the
+drifting model run with a Gaussian kernel at the sample itself, lies
+between the two and shows that the kernel shape changes little in the
+toy.</p>
+In all three variants, as in DMD, the two points are estimates of the
+posterior mean of <span class="math inline">\(x_0\)</span>, under the
+data and under the generator. They differ in how each estimate is made,
+by a network (the teacher, DMD’s fake) or from samples (kernel means),
+in the kernel, and in the query point, which is either a noised copy of
+the sample or the sample itself.
+</details>
+<hr />
+<h2 id="code-1">Code</h2>
+<p>All experiments of this post can be rerun from <a
+href="https://github.com/EDAPINENUT/contrast_gen.edapinenut.github.io/tree/main/demo"><code>demo/</code></a>.
+The notebook <a
+href="https://github.com/EDAPINENUT/contrast_gen.edapinenut.github.io/blob/main/demo/contrastive_generation.ipynb"><code>demo/contrastive_generation.ipynb</code></a>
+trains every model, prints every table and writes every figure and
+animation to <a
+href="https://github.com/EDAPINENUT/contrast_gen.edapinenut.github.io/tree/main/materials"><code>materials/</code></a>.
+The functions it calls are in <a
+href="https://github.com/EDAPINENUT/contrast_gen.edapinenut.github.io/blob/main/demo/assess.py"><code>demo/assess.py</code></a>.
+Everything runs on CPU, and the whole notebook takes about 40 minutes
+with 12 training processes running side by side
+(<code>pip install -r demo/requirements.txt</code>, then run the
+notebook from top to bottom).</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr>
+<th>Post</th>
+<th>Notebook</th>
+<th>Where to look in <code>assess.py</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Section 2, learning the flow map by simulation</td>
+<td>part 2</td>
+<td><code>sim_pos_neg</code>; <code>train_student</code> with
+<code>--variant sim-on-all</code></td>
+</tr>
+<tr>
+<td>Section 4, MeanFlow and DMD as pull and push</td>
+<td>parts 0 and 3</td>
+<td><code>pull_push</code> (the pull-push loss),
+<code>mf_pos_neg</code>, <code>mf_J</code>, <code>dmd_pos_neg</code>,
+<code>renoise</code>, <code>level_pred</code></td>
+</tr>
+<tr>
+<td>Section 6, toy experiments and ablations</td>
+<td>part 4</td>
+<td><code>train_student</code> with
+<code>--variant {mf,dmd}-{on,off}-{r0,all}</code> and
+<code>--mf-neg</code>; <code>export_distribution</code>,
+<code>table_distribution</code></td>
+</tr>
+<tr>
+<td>Section 7, drifting models and semi-drift</td>
+<td>part 5</td>
+<td><code>drift_field</code>, <code>kernel_posterior</code>;
+<code>train_student</code> with <code>--variant drift-on-r0</code>
+(<code>--drift-kernel gauss</code> for FM-ideal drift) or
+<code>--dmd-neg kernel</code> (semi-drift); <code>export_kernel</code>,
+<code>table_kernel</code></td>
+</tr>
+</tbody>
+</table>
+<p>A single run can also be started from the command line, for example
+<code>python demo/assess.py train --variant dmd-on-r0 --seed 0 --preset smoke --device cpu --steps 3000</code>,
+after training the teacher with
+<code>python demo/assess.py teacher</code>. The five stages of a
+training step (samples for the auxiliary network, the prediction <span
+class="math inline">\(x_{\text{pred}}\)</span>, the displacement <span
+class="math inline">\(x_{\text{pos}} - x_{\text{neg}}\)</span>, the
+pull-push loss and the backward pass) are spelled out at the top of the
+<code>train_student</code> section of <code>assess.py</code>.</p>
+  </div>
+
+</article>
+</div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrapper">
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li>Personal Email:</li>
+          <li><a href="mailto:">linhaitao[at]westlake.edu.cn</a></li>
+          <li><a href="mailto:">lbirdtao[at]gmail.com</a></li>
+        </ul>
+      </div>
+      <div class="footer-col footer-col-2">
+        <a href="https://scholar.google.com/citations?user=o5A23qIAAAAJ&hl=en" class="icon-button github">
+          <i class="ai ai-google-scholar-square icon-github"></i><span></span>
+        </a>
+        <a href="https://github.com/edapinenut" class="icon-button github">
+          <i class="fa fa-github icon-github"></i><span></span>
+        </a>
+      </div>
+      <div class="footer-col footer-col-3">
+        <a href="https://edapinenut.github.io/">&larr; Back to the homepage</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<div class="back-to-top">Top</div>
+<script>
+  (function () {
+    var btn = document.querySelector(".back-to-top");
+    window.addEventListener("scroll", function () { btn.style.display = window.scrollY > 220 ? "block" : "none"; });
+    btn.addEventListener("click", function () { window.scrollTo({ top: 0, behavior: "smooth" }); });
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,8 @@
+torch>=2.2
+numpy
+matplotlib
+pillow
+av
+notebook
+nbconvert
+ipykernel

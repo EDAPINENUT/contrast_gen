@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>$title$ | Haitao Lin</title>
+  <meta name="description" lang="en" content="$description$">
+  <meta name="author" content="Haitao Lin">
+  <meta property="og:title" content="$title$">
+  <meta property="og:description" content="$description$">
+  <meta property="og:type" content="article">
+
+  <link rel="shortcut icon" href="site/ht.jpeg">
+  <link rel="stylesheet" href="site/main.css">
+  <link rel="stylesheet" href="site/blog.css">
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+$if(highlighting-css)$
+  <style>
+$highlighting-css$
+  </style>
+$endif$
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]], tags: "none" },
+      chtml: { scale: 0.98 },
+      options: { skipHtmlTags: ["script", "noscript", "style", "textarea", "pre", "code"] }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+</head>
+
+<body>
+
+<header class="site-header">
+  <div class="wrapper">
+    <a class="site-title" href="https://edapinenut.github.io/">Haitao Lin</a>
+    <nav class="site-nav">
+      <div class="trigger">
+        <a class="page-link" href="https://edapinenut.github.io/"><b>Home</b></a>
+        <a class="page-link" href="https://edapinenut.github.io/#blog"><b>Blog</b></a>
+        <a class="page-link" href="$repo$"><b>Code</b></a>
+      </div>
+    </nav>
+  </div>
+</header>
+
+<div class="page-content">
+<div class="wrapper">
+<article class="post">
+
+  <header class="post-header">
+    <h1 class="post-title">$title$</h1>
+    <p class="post-meta">
+      <a href="https://edapinenut.github.io/">Haitao Lin</a> &middot; $date$ &middot;
+      <a href="$repo$/blob/main/demo/contrastive_generation.ipynb"><i class="fa fa-github" aria-hidden="true"></i> notebook &amp; code</a>
+    </p>
+  </header>
+
+$if(toc)$
+  <nav class="toc">
+    <div class="toc-heading"><i class="fa fa-list-ul" aria-hidden="true"></i> Contents</div>
+$toc$
+  </nav>
+$endif$
+
+  <div class="post-body">
+$body$
+  </div>
+
+</article>
+</div>
+</div>
+
+<footer class="site-footer">
+  <div class="wrapper">
+    <div class="footer-col-wrapper">
+      <div class="footer-col footer-col-1">
+        <ul class="contact-list">
+          <li>Personal Email:</li>
+          <li><a href="mailto:">linhaitao[at]westlake.edu.cn</a></li>
+          <li><a href="mailto:">lbirdtao[at]gmail.com</a></li>
+        </ul>
+      </div>
+      <div class="footer-col footer-col-2">
+        <a href="https://scholar.google.com/citations?user=o5A23qIAAAAJ&hl=en" class="icon-button github">
+          <i class="ai ai-google-scholar-square icon-github"></i><span></span>
+        </a>
+        <a href="https://github.com/edapinenut" class="icon-button github">
+          <i class="fa fa-github icon-github"></i><span></span>
+        </a>
+      </div>
+      <div class="footer-col footer-col-3">
+        <a href="https://edapinenut.github.io/">&larr; Back to the homepage</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<div class="back-to-top">Top</div>
+<script>
+  (function () {
+    var btn = document.querySelector(".back-to-top");
+    window.addEventListener("scroll", function () { btn.style.display = window.scrollY > 220 ? "block" : "none"; });
+    btn.addEventListener("click", function () { window.scrollTo({ top: 0, behavior: "smooth" }); });
+  })();
+</script>
+
+</body>
+</html>

@@ -1,0 +1,6 @@
+.venv/
+archive/
+demo/artifacts/
+__pycache__/
+.ipynb_checkpoints/
+.DS_Store
