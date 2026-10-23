@@ -203,9 +203,33 @@ h1.section-heading {
   color: #292929;
 }
 
-.like-text .fa {
+.like-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-size: 18px;
   color: #9b3022;
-  font-size: 1.15em;
+  background: #fff;
+  border: 1.5px solid #9b3022;
+  border-radius: 24px;
+  padding: 6px 18px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.like-btn:hover {
+  background: #fbf2f0;
+}
+
+.like-btn.liked {
+  background: #9b3022;
+  color: #fff;
+  cursor: default;
+}
+
+.like-icon {
+  font-size: 20px;
 }
 
 .back-to-top {

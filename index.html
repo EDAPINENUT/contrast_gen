@@ -1728,11 +1728,30 @@ pull-push loss and the backward pass) are spelled out at the top of the
 
 
 <div id="like" class="section like-box">
-  <p class="like-text"><i class="fa fa-thumbs-o-up" aria-hidden="true"></i>&nbsp; If you think this blog is helpful, please 👍 it.</p>
-  <a class="github-button" href="https://github.com/EDAPINENUT/contrast_gen" data-icon="octicon-star" data-size="large" data-show-count="true"
-     aria-label="Star EDAPINENUT/contrast_gen on GitHub">Star</a>
+  <p class="like-text">If you think this blog is helpful, please 👍 it.</p>
+  <button id="like-btn" class="like-btn" type="button" aria-pressed="false" title="Like this post">
+    <span class="like-icon" aria-hidden="true">👍</span><span id="like-count">&middot;</span>
+  </button>
 </div>
-<script async defer src="https://buttons.github.io/buttons.js"></script>
+<script>
+  // Like counter on a free hosted counter (abacus.jasoncameron.dev); each browser counts once.
+  (function () {
+    var api = "https://abacus.jasoncameron.dev", key = "edapinenut-contrast-gen/likes", flag = "contrast-gen-liked";
+    var btn = document.getElementById("like-btn"), count = document.getElementById("like-count");
+    var show = function (v) { count.textContent = v; };
+    var mark = function () { btn.classList.add("liked"); btn.setAttribute("aria-pressed", "true"); btn.title = "Thanks!"; };
+    if (localStorage.getItem(flag) === "1") mark();
+    fetch(api + "/get/" + key).then(function (r) { return r.json(); })
+      .then(function (d) { show(d.value || 0); }).catch(function () { show(0); });
+    btn.addEventListener("click", function () {
+      if (localStorage.getItem(flag) === "1") return;
+      localStorage.setItem(flag, "1");
+      mark();
+      fetch(api + "/hit/" + key).then(function (r) { return r.json(); })
+        .then(function (d) { show(d.value); }).catch(function () {});
+    });
+  })();
+</script>
 
 </div>
 </div>
