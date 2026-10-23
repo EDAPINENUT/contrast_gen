@@ -2689,10 +2689,9 @@ def f_pull_push_anchors(step=200, k=3):
     print(f"[figures] {MATERIALS / 'pull_push_anchors.png'}")
 
 
-@matplotlib.rc_context(FIG_RC)
 def f_teaser(run="dmd-on-all", step=200, k=3):
-    """Poster-style teaser of the post: the student's one-step samples at an early step, and on a few of them the
-    attraction toward x_pos, the repulsion from x_neg and the update, above the pull-push gradient."""
+    """Thumbnail of the post, without text: the student's one-step samples at an early step and, on a few of them,
+    the pull toward x_pos (green), the push away from x_neg (red) and the update x_pos - x_neg (black)."""
     d = np.load(ART / "assets" / "distribution_demo.npz")
     p = int(np.searchsorted(d[f"{run}__snap_steps"], step))
     xp, pos, neg = (d[f"{run}__c__{f}"][p] for f in ("x_pred", "x_pos", "x_neg"))
@@ -2700,41 +2699,26 @@ def f_teaser(run="dmd-on-all", step=200, k=3):
     size = np.linalg.norm(upd, axis=1)
     chosen = farthest_points(xp, k, size >= np.quantile(size, 0.3))
     scale = max(1.0, round(0.5 / np.median(size[chosen])))
-    fig = plt.figure(figsize=(6.4, 5.4))
-    ax = fig.add_axes([0.03, 0.17, 0.94, 0.67])
     data, cloud = d["data"], d[f"{run}__k1"][p]
-    ax.scatter(*data.T, s=2.5, c="#4C72B0", alpha=0.22, lw=0, zorder=0)
-    ax.scatter(*cloud[:1500].T, s=2.5, c=FC["student"], alpha=0.28, lw=0, zorder=1)
-    for i in chosen:
-        arrow(ax, xp[i], pos[i], FC["teacher"], lw=2.2)
-        arrow(ax, xp[i], 2 * xp[i] - neg[i], FC["neg"], lw=2.2)
-        arrow(ax, xp[i], xp[i] + scale * upd[i], "k", lw=2.8, z=6)
-        dot(ax, pos[i], FC["teacher"], s=70)
-        dot(ax, neg[i], FC["neg"], s=70)
-        dot(ax, xp[i], "k", s=85, z=7)
     shown = np.concatenate([xp[chosen], pos[chosen], neg[chosen], (2 * xp - neg)[chosen],
                             (xp + scale * upd)[chosen]])
-    lo = np.minimum(np.quantile(data, 0.005, axis=0), shown.min(0)) - 0.2
-    hi = np.maximum(np.quantile(data, 0.995, axis=0), shown.max(0)) + 0.2
-    hi[1] += 0.45 * (hi[1] - lo[1])
+    lo = np.minimum(np.quantile(data, 0.005, axis=0), shown.min(0)) - 0.12
+    hi = np.maximum(np.quantile(data, 0.995, axis=0), shown.max(0)) + 0.12
+    width = 5.0
+    fig = plt.figure(figsize=(width, width * (hi[1] - lo[1]) / (hi[0] - lo[0])))
+    ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
+    ax.scatter(*data.T, s=3.0, c="#4C72B0", alpha=0.3, lw=0, zorder=0)
+    ax.scatter(*cloud[:1500].T, s=3.0, c=FC["student"], alpha=0.35, lw=0, zorder=1)
+    for i in chosen:
+        arrow(ax, xp[i], pos[i], FC["teacher"], lw=2.4)
+        arrow(ax, xp[i], 2 * xp[i] - neg[i], FC["neg"], lw=2.4)
+        arrow(ax, xp[i], xp[i] + scale * upd[i], "k", lw=3.0, z=6)
+        dot(ax, pos[i], FC["teacher"], s=60)
+        dot(ax, neg[i], FC["neg"], s=60)
+        dot(ax, xp[i], "k", s=75, z=7)
     ax.set_xlim(lo[0], hi[0])
     ax.set_ylim(lo[1], hi[1])
-    ax.set_aspect("equal", adjustable="datalim")
     ax.axis("off")
-    ax.legend(handles=[
-        plt.Line2D([], [], marker="o", ls="", c="k", label="$x_{\\mathrm{pred}}$, the moved sample"),
-        plt.Line2D([], [], c=FC["teacher"], lw=2.2, label="pull toward $x_{\\mathrm{pos}}$"),
-        plt.Line2D([], [], c=FC["neg"], lw=2.2, label="push away from $x_{\\mathrm{neg}}$"),
-        plt.Line2D([], [], c="k", lw=2.8, label="update $x_{\\mathrm{pos}} - x_{\\mathrm{neg}}$"),
-    ], loc="upper right", fontsize=9.5, frameon=True, framealpha=0.9, edgecolor="0.85")
-    fig.text(0.04, 0.95, "Contrastive Generation", fontsize=19, color="#002336", va="top")
-    fig.text(0.04, 0.885, "one update behind MeanFlow, DMD and drifting models", fontsize=11.5, color="0.35", va="top")
-    fig.text(0.5, 0.11, "$\\nabla_\\theta\\mathcal{L} = -2W\\,\\left(\\partial x_{\\mathrm{pred}}/\\partial\\theta\\right)^{\\top}"
-             "\\left(x_{\\mathrm{pos}} - x_{\\mathrm{neg}}\\right)$", fontsize=15, ha="center", va="center",
-             bbox=dict(boxstyle="round,pad=0.45", fc="white", ec="#9b3022", lw=1.2))
-    fig.text(0.5, 0.035, "negative from the student (MeanFlow)  ·  a fake network (DMD)  ·  sample kernels (drifting)",
-             fontsize=8.6, color="0.35", ha="center", va="center")
-    fig.add_artist(plt.Line2D([0.04, 0.96], [0.855, 0.855], color="#9b3022", lw=1.2))
     for ext in ("png", "svg"):
         fig.savefig(MATERIALS / f"teaser.{ext}", dpi=200, facecolor="white")
     plt.close(fig)
