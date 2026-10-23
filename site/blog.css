@@ -1,223 +1,198 @@
-/* Article layout on top of the homepage's main.css: same fonts, header, footer and accent color (#9b3022). */
-
-.site-title,
-.site-title:visited {
-  color: #002336;
-  float: left;
+/* The homepage's own section styles (copied from the <style> block of edapinenut.github.io/index.html). */
+.section {
+  margin: 40px 0;
+  padding: 0 20px;
 }
 
-.post {
-  max-width: 820px;
-  margin: 0 auto;
-  font-size: 17px;
-  line-height: 1.7;
-  font-weight: 300;
+.section-heading {
+  margin-bottom: 20px;
+  font-size: 1.2em;
 }
 
-.post-header {
-  margin: 10px 0 28px;
-  padding-bottom: 18px;
-  border-bottom: 1px solid #e3d3d1;
+h1.section-heading {
+  font-size: 1.2em;
 }
 
-.post-title {
-  font-size: 2.05em;
-  line-height: 1.25;
-  font-weight: 400;
-  color: #002336;
-  letter-spacing: -0.5px;
-  margin-bottom: 12px;
+.section-content {
+  margin-left: 20px;
 }
 
-.post-meta {
-  color: #696969;
-  font-size: 15px;
-  margin: 0;
+/* The post card on the cover, built like the homepage's name card but wide enough for the title. */
+#post-card {
+  width: 760px;
 }
 
-/* Table of contents */
-.toc {
-  background: #fff;
-  border: 1px solid #ececec;
-  border-left: 3px solid #9b3022;
-  border-radius: 3px;
-  padding: 14px 22px 10px;
-  margin: 0 0 34px;
-  font-size: 15px;
+.post-col-1 {
+  width: calc(28% - 15px);
 }
 
-.toc-heading {
-  font-weight: 400;
-  color: #002336;
-  margin-bottom: 6px;
+.post-col-2 {
+  width: calc(72% - 15px);
+  text-align: left !important;
 }
 
-.toc ul {
-  list-style: none;
-  margin: 0;
-  padding-left: 0;
+#post-card .circle-img {
+  width: 132px;
 }
 
-.toc li {
-  margin: 2px 0;
+#post-title {
+  font-size: 24px;
+  font-weight: bold;
+  line-height: 1.3;
+  color: #292929;
+  margin-top: 6px;
 }
 
-/* Headings */
-.post-body h2 {
-  font-size: 1.45em;
-  font-weight: 400;
-  color: #002336;
-  margin: 46px 0 16px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #9b3022;
+#post-meta {
+  font-size: 13pt;
+  color: #555;
+  margin-top: 8px;
 }
 
-.post-body h3 {
-  font-size: 1.18em;
-  font-weight: 400;
-  color: #002336;
-  margin: 30px 0 10px;
+#post-card .social-media .icon-button {
+  top: 14px;
+  margin: 0 8px 0 0;
 }
 
-.post-body p,
-.post-body ul,
-.post-body ol,
-.post-body table,
-.post-body pre,
-.post-body figure,
-.post-body details {
-  margin-bottom: 18px;
+@media screen and (max-width: 800px) {
+  #post-card {
+    width: calc(100% - 30px);
+  }
 }
 
-.post-body ul,
-.post-body ol {
-  margin-left: 26px;
+@media screen and (max-width: 600px) {
+  .post-col-1 {
+    display: none;
+  }
+  .post-col-2 {
+    width: 100%;
+    text-align: center !important;
+  }
+  #post-title {
+    font-size: 19px;
+  }
 }
 
-.post-body li {
-  margin-bottom: 6px;
+/* Text inside sections */
+.section-content p,
+.section-content ul,
+.section-content ol,
+.section-content table,
+.section-content pre,
+.section-content figure,
+.section-content details {
+  margin-bottom: 15px;
 }
 
-.post-body strong {
-  font-weight: 500;
+.section-content ul,
+.section-content ol {
+  margin-left: 22px;
 }
 
-.post-body hr {
-  border: 0;
-  border-top: 1px solid #e3d3d1;
-  margin: 36px 0;
+.section-content li {
+  margin-bottom: 4px;
+}
+
+.section-content strong {
+  font-weight: bold;
+}
+
+.section-content h3 {
+  font-size: 1em;
+  font-weight: bold;
+  margin: 26px 0 8px;
+}
+
+.section-content hr,
+.page-content > .wrapper > hr {
+  display: none;
+}
+
+.contents-list li {
+  margin-bottom: 2px;
 }
 
 /* Figures */
-.post-body figure {
-  margin: 26px 0 30px;
+.section-content figure {
+  margin: 22px 0 26px;
   text-align: center;
 }
 
-.post-body figure img {
+.section-content figure img {
   max-width: 100%;
   height: auto;
-  background: #fff;
-  border: 1px solid #ececec;
-  border-radius: 3px;
 }
 
-.post-body figcaption {
-  font-size: 14px;
-  line-height: 1.55;
-  color: #5f5f5f;
+.section-content figcaption {
+  font-size: 10.5pt;
+  line-height: 1.5;
+  color: #696969;
   text-align: left;
-  margin: 10px auto 0;
-  max-width: 760px;
+  margin: 8px auto 0;
+  max-width: 820px;
 }
 
 /* Tables */
-.post-body table {
+.section-content table {
   border-collapse: collapse;
   display: block;
   overflow-x: auto;
-  font-size: 15px;
   width: max-content;
   max-width: 100%;
   margin-left: auto;
   margin-right: auto;
+  font-size: 15px;
 }
 
-.post-body th,
-.post-body td {
+.section-content th,
+.section-content td {
   border-bottom: 1px solid #e6e6e6;
-  padding: 6px 12px;
+  padding: 5px 12px;
   text-align: left;
   vertical-align: top;
 }
 
-.post-body thead th {
-  font-weight: 500;
-  border-bottom: 2px solid #9b3022;
-  background: #fbf7f6;
+.section-content thead th {
+  font-weight: bold;
+  border-bottom: 1px solid #9b3022;
 }
 
 /* Code */
-.post-body pre {
-  background: #f6f6f8;
-  border: 1px solid #e8e8e8;
-  border-radius: 3px;
-  padding: 12px 14px;
+.section-content pre {
   overflow-x: auto;
   font-size: 13.5px;
   line-height: 1.5;
 }
 
-.post-body code {
-  font-size: 0.88em;
-  background: #f3f3f6;
-  border: 1px solid #e8e8e8;
-}
-
-.post-body pre code {
-  background: transparent;
+.section-content pre code {
   border: 0;
   padding: 0;
   font-size: inherit;
+  background: transparent;
 }
 
 /* Math */
-.post-body .math.display {
+.section-content .math.display {
   display: block;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 2px 0;
 }
 
 /* Appendix */
-.post-body details {
-  background: #fff;
-  border: 1px solid #ececec;
-  border-radius: 3px;
-  padding: 10px 18px;
+.section-content details {
+  border-left: 3px solid #e8e8e8;
+  padding: 2px 0 2px 14px;
 }
 
-.post-body details > summary {
+.section-content details > summary {
   cursor: pointer;
-  font-weight: 400;
-  color: #002336;
+  font-weight: bold;
 }
 
-.post-body details[open] > summary {
-  margin-bottom: 10px;
-  border-bottom: 1px solid #f0e6e4;
-  padding-bottom: 6px;
+.section-content details[open] > summary {
+  margin-bottom: 8px;
 }
 
 .back-to-top {
   cursor: pointer;
-}
-
-@media screen and (max-width: 600px) {
-  .post {
-    font-size: 16px;
-  }
-  .post-title {
-    font-size: 1.6em;
-  }
 }

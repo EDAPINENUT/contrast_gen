@@ -1,15 +1,15 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
+
 <head>
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Contrastive Generation: Training a Few-Step Generator by
-Pulling and Pushing Its Samples | Haitao Lin</title>
+
+  <title>Contrastive Generation: Training a Few-Step Generator by Pulling and Pushing Its Samples | Haitao Lin</title>
   <meta name="description" lang="en" content="MeanFlow, Distribution Matching Distillation and drifting models as one pull-push update: a few-step generator moves its samples toward a positive and away from a negative.">
   <meta name="author" content="Haitao Lin">
-  <meta property="og:title" content="Contrastive Generation: Training a
-Few-Step Generator by Pulling and Pushing Its Samples">
+  <meta property="og:title" content="Contrastive Generation: Training a Few-Step Generator by Pulling and Pushing Its Samples">
   <meta property="og:description" content="MeanFlow, Distribution Matching Distillation and drifting models as one pull-push update: a few-step generator moves its samples toward a positive and away from a negative.">
   <meta property="og:type" content="article">
   <meta property="og:image" content="https://edapinenut.github.io/contrast_gen/materials/teaser.png">
@@ -85,6 +85,7 @@ code span.va { color: #19177c; } /* Variable */
 code span.vs { color: #4070a0; } /* VerbatimString */
 code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
   </style>
+
   <script>
     window.MathJax = {
       tex: { inlineMath: [["\\(", "\\)"]], displayMath: [["\\[", "\\]"]], tags: "none" },
@@ -95,62 +96,57 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
   <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
 </head>
 
+
 <body>
 
 <header class="site-header">
   <div class="wrapper">
-    <a class="site-title" href="https://edapinenut.github.io/">Haitao Lin</a>
     <nav class="site-nav">
       <div class="trigger">
         <a class="page-link" href="https://edapinenut.github.io/"><b>Home</b></a>
-        <a class="page-link" href="https://edapinenut.github.io/#blogs"><b>Blog</b></a>
+        <a class="page-link" href="https://edapinenut.github.io/#blogs"><b>Blogs</b></a>
+        <a class="page-link" href="#contents"><b>Contents</b></a>
+        <a class="page-link" href="#appendix"><b>Appendix</b></a>
         <a class="page-link" href="https://github.com/EDAPINENUT/contrast_gen"><b>Code</b></a>
       </div>
     </nav>
   </div>
 </header>
 
+<div id="profile-cover" class="cover shallow-bg img-responsive">
+  <div id="post-card" class="profile-wrapper wrapper-light">
+    <div id="my-pic" class="profile-col post-col-1">
+      <a href="https://edapinenut.github.io/">
+        <img id="profile-avatar" src="https://edapinenut.github.io/images/self-portrait/me.jpeg" alt="Haitao Lin" class="circle-img border-dark"/>
+      </a>
+    </div>
+    <div id="my-contact" class="profile-col post-col-2">
+      <div id="post-title" class="text-grey-dark">Contrastive Generation: Training a Few-Step Generator by Pulling and Pushing Its Samples</div>
+      <div id="post-meta" class="text-grey">Haitao Lin &middot; October 2026</div>
+      <div class="social-media">
+        <a href="https://edapinenut.github.io/" class="icon-button github" title="Homepage">
+          <i class="fa fa-home icon-github"></i><span></span>
+        </a>
+        <a href="https://github.com/EDAPINENUT/contrast_gen" class="icon-button github" title="Code">
+          <i class="fa fa-github icon-github"></i><span></span>
+        </a>
+        <a href="https://github.com/EDAPINENUT/contrast_gen/blob/main/demo/contrastive_generation.ipynb" class="icon-button github" title="Notebook">
+          <i class="fa fa-book icon-github"></i><span></span>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="page-content">
 <div class="wrapper">
-<article class="post">
 
-  <header class="post-header">
-    <h1 class="post-title">Contrastive Generation: Training a Few-Step
-Generator by Pulling and Pushing Its Samples</h1>
-    <p class="post-meta">
-      <a href="https://edapinenut.github.io/">Haitao Lin</a> &middot; October
-2026 &middot;
-      <a href="https://github.com/EDAPINENUT/contrast_gen/blob/main/demo/contrastive_generation.ipynb"><i class="fa fa-github" aria-hidden="true"></i> notebook &amp; code</a>
-    </p>
-  </header>
-
-  <nav class="toc">
-    <div class="toc-heading"><i class="fa fa-list-ul" aria-hidden="true"></i> Contents</div>
-<ul>
-<li><a href="#velocities-and-flow-maps"
-id="toc-velocities-and-flow-maps">1. Velocities and flow maps</a></li>
-<li><a href="#learning-the-flow-map-by-simulation"
-id="toc-learning-the-flow-map-by-simulation">2. Learning the flow map by
-simulation</a></li>
-<li><a href="#meanflow-and-dmd" id="toc-meanflow-and-dmd">3. MeanFlow
-and DMD</a></li>
-<li><a href="#meanflow-and-dmd-as-pull-and-push"
-id="toc-meanflow-and-dmd-as-pull-and-push">4. MeanFlow and DMD as pull
-and push</a></li>
-<li><a href="#the-design-space" id="toc-the-design-space">5. The design
-space</a></li>
-<li><a href="#toy-experiments" id="toc-toy-experiments">6. Toy
-experiments</a></li>
-<li><a href="#an-extension-to-drifting-models"
-id="toc-an-extension-to-drifting-models">7. An extension to drifting
-models</a></li>
-<li><a href="#conclusion" id="toc-conclusion">8. Conclusion</a></li>
-<li><a href="#appendix" id="toc-appendix">Appendix</a></li>
-<li><a href="#code-1" id="toc-code-1">Code</a></li>
-</ul>
-  </nav>
-
-  <div class="post-body">
+<div id="overview" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-id-card" aria-hidden="true"></i>
+    Overview
+  </h1>
+  <div class="section-content">
 <p>A few-step generator turns noise into a sample with one or a few
 network calls. This post shows that three ways of training such a
 generator, MeanFlow, Distribution Matching Distillation (DMD) and the
@@ -163,8 +159,37 @@ build the two points from.</p>
 <p>All pictures and numbers in this post come from one 2D toy problem,
 the two-moons dataset, with a flow-matching teacher and students
 distilled from it.</p>
-<hr />
-<h2 id="velocities-and-flow-maps">1. Velocities and flow maps</h2>
+  </div>
+</div>
+<div id="contents" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-list-ul" aria-hidden="true"></i>
+    Contents
+  </h1>
+  <div class="section-content">
+<ul class="contents-list">
+      <li><a href="#velocities-and-flow-maps">1. Velocities and flow maps</a></li>
+      <li><a href="#learning-the-flow-map-by-simulation">2. Learning the flow map by
+simulation</a></li>
+      <li><a href="#meanflow-and-dmd">3. MeanFlow and DMD</a></li>
+      <li><a href="#meanflow-and-dmd-as-pull-and-push">4. MeanFlow and DMD as pull
+and push</a></li>
+      <li><a href="#the-design-space">5. The design space</a></li>
+      <li><a href="#toy-experiments">6. Toy experiments</a></li>
+      <li><a href="#an-extension-to-drifting-models">7. An extension to drifting
+models</a></li>
+      <li><a href="#conclusion">8. Conclusion</a></li>
+      <li><a href="#appendix">Appendix</a></li>
+      <li><a href="#code-1">Code</a></li>
+</ul>
+  </div>
+</div>
+<div id="velocities-and-flow-maps" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-location-arrow" aria-hidden="true"></i>
+    1. Velocities and flow maps
+  </h1>
+  <div class="section-content">
 <p>We use the linear interpolation of flow matching, with data at <span
 class="math inline">\(t=0\)</span> and noise at <span
 class="math inline">\(t=1\)</span>,</p>
@@ -329,9 +354,15 @@ two distributions do not match.</figcaption>
 <p>From Section 2 on, the ODE, its trajectories, the average velocity
 <span class="math inline">\(u\)</span> and the flow map all refer to the
 teacher’s field.</p>
-<hr />
-<h2 id="learning-the-flow-map-by-simulation">2. Learning the flow map by
-simulation</h2>
+  </div>
+</div>
+<div id="learning-the-flow-map-by-simulation" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-road" aria-hidden="true"></i>
+    2. Learning the flow map by
+simulation
+  </h1>
+  <div class="section-content">
 <p>The student is a network <span
 class="math inline">\(u_\theta(x,t,r)\)</span> that outputs an average
 velocity. Its prediction of the flow map from a state <span
@@ -455,8 +486,14 @@ accurate but expensive, because every <span
 class="math inline">\((t,r)\)</span> pair costs a full ODE solve, which
 takes dozens of teacher calls. The rest of the post asks whether a
 single teacher call per update can replace that solve.</p>
-<hr />
-<h2 id="meanflow-and-dmd">3. MeanFlow and DMD</h2>
+  </div>
+</div>
+<div id="meanflow-and-dmd" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-cubes" aria-hidden="true"></i>
+    3. MeanFlow and DMD
+  </h1>
+  <div class="section-content">
 <h3 id="meanflow">MeanFlow</h3>
 <p>MeanFlow (<a href="https://arxiv.org/abs/2505.13447">Geng et al.,
 2025</a>) starts from the definition of the average velocity.
@@ -553,9 +590,15 @@ to the next level instead of following a one-step map. During training,
 the generator’s inputs are the noisy states produced by running the
 current student for several steps, and the loss is applied to the
 generator’s output at that step.</p>
-<hr />
-<h2 id="meanflow-and-dmd-as-pull-and-push">4. MeanFlow and DMD as pull
-and push</h2>
+  </div>
+</div>
+<div id="meanflow-and-dmd-as-pull-and-push" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-exchange" aria-hidden="true"></i>
+    4. MeanFlow and DMD as pull
+and push
+  </h1>
+  <div class="section-content">
 <h3 id="one-teacher-call-gives-only-a-tangent-point">One teacher call
 gives only a tangent point</h3>
 <p>The positive of Section 2 needs a full ODE solve, which costs many
@@ -819,8 +862,14 @@ class="sourceCode python"><code class="sourceCode python"><span id="cb1-1"><a hr
 <span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="co"># DMD. The points are built at the renoised sample, and the negative comes from the fake.</span></span>
 <span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>x_tp <span class="op">=</span> (<span class="dv">1</span> <span class="op">-</span> tp) <span class="op">*</span> sg(x_hat) <span class="op">+</span> tp <span class="op">*</span> eps_p</span>
 <span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>g_dmd <span class="op">=</span> X(x_tp, v_teacher(x_tp, tp), tp, <span class="dv">0</span>) <span class="op">-</span> X(x_tp, v_phi(x_tp, tp), tp, <span class="dv">0</span>)</span></code></pre></div>
-<hr />
-<h2 id="the-design-space">5. The design space</h2>
+  </div>
+</div>
+<div id="the-design-space" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-sliders" aria-hidden="true"></i>
+    5. The design space
+  </h1>
+  <div class="section-content">
 <p>Once both methods are written as the same update, their ingredients
 can be varied independently. Three choices describe every variant in
 this post, and each corresponds to a pair of runs in the toy.</p>
@@ -909,8 +958,14 @@ produce from it.</li>
 <p>Published methods also combine the two, for example continuous-time
 consistency distillation with an added DMD term (<a
 href="https://arxiv.org/abs/2510.08431">Zheng et al., 2025</a>).</p>
-<hr />
-<h2 id="toy-experiments">6. Toy experiments</h2>
+  </div>
+</div>
+<div id="toy-experiments" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-flask" aria-hidden="true"></i>
+    6. Toy experiments
+  </h1>
+  <div class="section-content">
 <p><strong>Setup.</strong> The data are two moons with noise standard
 deviation 0.05, standardized with one isotropic scale. The teacher is a
 4×256 MLP trained by flow matching. Every student is an average-velocity
@@ -1086,9 +1141,15 @@ negative is obtained, and where the points are built. Every combination
 we tried, including ones that no published method uses, gives an
 effective few-step generator. These are small CPU runs on 2D data, so
 image-scale behavior may differ.</p>
-<hr />
-<h2 id="an-extension-to-drifting-models">7. An extension to drifting
-models</h2>
+  </div>
+</div>
+<div id="an-extension-to-drifting-models" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-random" aria-hidden="true"></i>
+    7. An extension to drifting
+models
+  </h1>
+  <div class="section-content">
 <p>Drifting models (<a href="https://arxiv.org/abs/2602.04770">Deng et
 al., 2026</a>) train a one-step generator <span
 class="math inline">\(\hat x = G_\theta(\epsilon)\)</span> without any
@@ -1331,8 +1392,14 @@ each, it rises to 11.82. Semi-drift cannot use the same remedy, because
 its Gaussian kernel comes from the noising process in data space. At
 image scale, DMD’s learned fake therefore remains the practical way to
 build the negative.</p>
-<hr />
-<h2 id="conclusion">8. Conclusion</h2>
+  </div>
+</div>
+<div id="conclusion" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-flag-checkered" aria-hidden="true"></i>
+    8. Conclusion
+  </h1>
+  <div class="section-content">
 <p>How the positive and the negative are built is the central design
 choice in training a few-step generator. The pull-push gradient fixes
 the rest of the update, and MeanFlow, DMD and drifting models differ
@@ -1354,8 +1421,14 @@ semi-drift.</p>
 samples suffice, but in image space a kernel estimate needs far more
 samples or a learned feature space, so a learned network remains the
 efficient way to build the points.</p>
-<hr />
-<h2 id="appendix">Appendix</h2>
+  </div>
+</div>
+<div id="appendix" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-paperclip" aria-hidden="true"></i>
+    Appendix
+  </h1>
+  <div class="section-content">
 <details>
 <summary>
 A. The MeanFlow identity
@@ -1583,8 +1656,14 @@ by a network (the teacher, DMD’s fake) or from samples (kernel means),
 in the kernel, and in the query point, which is either a noised copy of
 the sample or the sample itself.
 </details>
-<hr />
-<h2 id="code-1">Code</h2>
+  </div>
+</div>
+<div id="code-1" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-code" aria-hidden="true"></i>
+    Code
+  </h1>
+  <div class="section-content">
 <p>All experiments of this post can be rerun from <a
 href="https://github.com/EDAPINENUT/contrast_gen/tree/main/demo"><code>demo/</code></a>.
 The notebook <a
@@ -1660,8 +1739,9 @@ class="math inline">\(x_{\text{pos}} - x_{\text{neg}}\)</span>, the
 pull-push loss and the backward pass) are spelled out at the top of the
 <code>train_student</code> section of <code>assess.py</code>.</p>
   </div>
+</div>
 
-</article>
+
 </div>
 </div>
 
