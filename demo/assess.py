@@ -2689,20 +2689,23 @@ def f_pull_push_anchors(step=200, k=3):
     print(f"[figures] {MATERIALS / 'pull_push_anchors.png'}")
 
 
-def f_teaser(run="dmd-on-all", step=200, k=3, arrow_len=0.22, crop=0.82):
+def f_teaser(run="dmd-on-all", step=200, k=3, arrow_len=0.2, angle=45.0):
     """Square thumbnail of the post, without text: the student's one-step samples at an early step and, on a few of
     them, the directions of the pull toward x_pos (green), the push away from x_neg (red) and the update
-    x_pos - x_neg (black), each drawn `arrow_len` of the half-width long; the square spans `crop` of the samples'
-    width."""
+    x_pos - x_neg (black), each drawn `arrow_len` of the half-width long. The scene is rotated by `angle` degrees so
+    that the two moons lie along the diagonal of the square."""
     d = np.load(ART / "assets" / "distribution_demo.npz")
     p = int(np.searchsorted(d[f"{run}__snap_steps"], step))
-    xp, pos, neg = (d[f"{run}__c__{f}"][p] for f in ("x_pred", "x_pos", "x_neg"))
+    a = np.deg2rad(angle)
+    R = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
+    rot = lambda v: v @ R.T
+    xp, pos, neg = (rot(d[f"{run}__c__{f}"][p]) for f in ("x_pred", "x_pos", "x_neg"))
+    data, cloud = rot(d["data"]), rot(d[f"{run}__k1"][p])
     upd = pos - neg
     size = np.linalg.norm(upd, axis=1)
-    data, cloud = d["data"], d[f"{run}__k1"][p]
-    lo, hi = np.quantile(data, 0.005, axis=0), np.quantile(data, 0.995, axis=0)
-    c, half = (lo + hi) / 2, crop * (hi[0] - lo[0]) / 2
-    inside = (np.abs(xp - c) < 0.62 * half).all(1)
+    lo, hi = np.quantile(data, 0.003, axis=0), np.quantile(data, 0.997, axis=0)
+    c, half = (lo + hi) / 2, (hi - lo).max() / 2 * 1.06
+    inside = (np.abs(xp - c) < 0.7 * half).all(1)
     chosen = farthest_points(xp, k, (size >= np.quantile(size, 0.3)) & inside)
     unit = lambda v: arrow_len * half * v / np.linalg.norm(v, axis=1, keepdims=True).clip(1e-9)
     pull, push, upd_draw = unit(pos - xp), unit(xp - neg), unit(upd)
