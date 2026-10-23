@@ -2701,7 +2701,7 @@ def f_teaser(run="dmd-on-all", step=200, k=3):
     size = np.linalg.norm(upd, axis=1)
     chosen = farthest_points(xp, k, size >= np.quantile(size, 0.3))
     scale = max(1.0, round(0.5 / np.median(size[chosen])))
-    fig = plt.figure(figsize=(8.0, 3.0))
+    fig = plt.figure(figsize=(8.0, 3.6))
     ax = fig.add_axes([0.43, 0.02, 0.56, 0.96])
     data, cloud = d["data"], d[f"{run}__k1"][p]
     ax.scatter(*data.T, s=2.0, c="#4C72B0", alpha=0.25, lw=0, zorder=0)
@@ -2721,17 +2721,17 @@ def f_teaser(run="dmd-on-all", step=200, k=3):
     ax.set_ylim(lo[1], hi[1])
     ax.set_aspect("equal", adjustable="datalim")
     ax.axis("off")
-    fig.text(0.035, 0.88, "Contrastive Generation", fontsize=17, color="#002336", va="center")
-    fig.text(0.035, 0.75, "one update behind MeanFlow, DMD\nand drifting models", fontsize=9.5, color="0.35",
+    fig.text(0.035, 0.89, "Contrastive Generation", fontsize=17, color="#002336", va="center")
+    fig.text(0.035, 0.775, "one update behind MeanFlow, DMD\nand drifting models", fontsize=9.5, color="0.35",
              va="center", linespacing=1.3)
-    fig.add_artist(plt.Line2D([0.035, 0.405], [0.655, 0.655], color="#9b3022", lw=1.1))
-    fig.text(0.22, 0.52, "$\\nabla_\\theta\\mathcal{L} = -2W\\,\\left(\\partial x_{\\mathrm{pred}}/\\partial\\theta\\right)^{\\top}"
+    fig.add_artist(plt.Line2D([0.035, 0.405], [0.69, 0.69], color="#9b3022", lw=1.1))
+    fig.text(0.22, 0.57, "$\\nabla_\\theta\\mathcal{L} = -2W\\,\\left(\\partial x_{\\mathrm{pred}}/\\partial\\theta\\right)^{\\top}"
              "\\left(x_{\\mathrm{pos}} - x_{\\mathrm{neg}}\\right)$", fontsize=10.5, ha="center", va="center",
              bbox=dict(boxstyle="round,pad=0.4", fc="white", ec="#9b3022", lw=1.0))
-    key = [(0.36, "k", "o", "$x_{\\mathrm{pred}}$: the moved sample"),
-           (0.27, FC["teacher"], None, "pull toward $x_{\\mathrm{pos}}$"),
-           (0.18, FC["neg"], None, "push away from $x_{\\mathrm{neg}}$"),
-           (0.09, "k", None, "update $x_{\\mathrm{pos}} - x_{\\mathrm{neg}}$")]
+    key = [(0.42, "k", "o", "$x_{\\mathrm{pred}}$: the moved sample"),
+           (0.32, FC["teacher"], None, "pull toward $x_{\\mathrm{pos}}$"),
+           (0.22, FC["neg"], None, "push away from $x_{\\mathrm{neg}}$"),
+           (0.12, "k", None, "update $x_{\\mathrm{pos}} - x_{\\mathrm{neg}}$")]
     for y, c, marker, label in key:
         if marker:
             fig.add_artist(plt.Line2D([0.06], [y], marker="o", ms=6, color=c, ls=""))
