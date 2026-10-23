@@ -49,6 +49,13 @@ ROOT = Path(__file__).resolve().parent
 ART = ROOT / "artifacts"
 MATERIALS = ROOT.parent / "materials"
 
+# The dataset is fixed per process by CG_DATA, and training subprocesses inherit it. Datasets other than the
+# two moons of the post keep all their artifacts (teacher, runs, exports) under artifacts/<name>/.
+DATA = os.environ.get("CG_DATA", "moons")
+DIM = {"moons": 2, "checker3d": 3}[DATA]
+if DATA != "moons":
+    ART = ART / DATA
+
 
 def pick_device(name="auto"):
     if name != "auto":
@@ -261,6 +268,14 @@ class Preset:
 
 
 def get_preset(name):
+    p = _base_preset(name)
+    if DATA == "checker3d":
+        # The sharp cube faces need a better-trained teacher than the moons do.
+        p.teacher = replace(p.teacher, steps=max(p.teacher.steps, 20_000), batch=max(p.teacher.batch, 1024))
+    return p
+
+
+def _base_preset(name):
     if name == "full":
         return Preset("full")
     if name == "smoke":
@@ -365,6 +380,50 @@ class Moons:
         return self.standardize(x).to(self.device), lab.to(self.device)
 
 
+CHECKER_CELLS = torch.tensor([c for c in itertools.product(range(3), repeat=3) if sum(c) % 2 == 0],
+                             dtype=torch.float32)
+
+
+def checker3d_raw(n, generator=None):
+    """3D checkerboard: uniform on the 14 filled unit cubes of a 3x3x3 grid on [-1.5, 1.5]^3, the cells whose
+    indices sum to an even number (the corners and the centre are filled). Label: index of the cube."""
+    idx = torch.randint(len(CHECKER_CELLS), (n,), generator=generator)
+    return CHECKER_CELLS[idx] + torch.rand(n, 3, generator=generator) - 1.5, idx
+
+
+class Checker3D:
+    """Same interface as Moons; one isotropic scale, so the cubes stay cubes."""
+
+    def __init__(self, device="cpu"):
+        self.device = torch.device(device)
+        x, _ = checker3d_raw(1_000_000, torch.Generator().manual_seed(12345))
+        self.mean = x.mean(0).to(self.device)
+        self.scale = x.var(0).mean().sqrt().item()
+
+    def standardize(self, x):
+        return (x - self.mean.to(x.device)) / self.scale
+
+    def sample(self, n, with_labels=False):
+        x, lab = checker3d_raw(n)
+        x, lab = self.standardize(x.to(self.device)), lab.to(self.device)
+        return (x, lab) if with_labels else x
+
+    def fixed(self, n, seed):
+        x, lab = checker3d_raw(n, torch.Generator().manual_seed(seed))
+        return self.standardize(x).to(self.device), lab.to(self.device)
+
+    def edges(self):
+        """The 12 edges of every filled cube, standardized, as [n_edges, 2, 3] segments for the 3D plots."""
+        corners = torch.tensor(list(itertools.product((0.0, 1.0), repeat=3)))
+        pairs = [(a, b) for a, b in itertools.combinations(range(8), 2) if (corners[a] - corners[b]).abs().sum() == 1]
+        segs = torch.stack([torch.stack([c + corners[a], c + corners[b]]) for c in CHECKER_CELLS for a, b in pairs])
+        return self.standardize(segs - 1.5).cpu().numpy()
+
+
+def make_data(noise, device):
+    return Moons(noise, device) if DATA == "moons" else Checker3D(device)
+
+
 def load_refs(moons, n):
     """ref_A and ref_B: two independent fixed data sets with moon labels."""
     path = ART / "data" / f"refs_{n}.pt"
@@ -407,7 +466,7 @@ class TimeEmbed(nn.Module):
         return torch.cat([t, torch.sin(a), torch.cos(a)], dim=-1)
 
 
-def make_mlp(d_in, width, depth, d_out=2):
+def make_mlp(d_in, width, depth, d_out=DIM):
     layers = [nn.Linear(d_in, width), nn.SiLU()]
     for _ in range(depth - 1):
         layers += [nn.Linear(width, width), nn.SiLU()]
@@ -422,7 +481,7 @@ class VelocityNet(nn.Module):
         super().__init__()
         self.cfg = dict(width=width, depth=depth, n_freq=n_freq)
         self.emb = TimeEmbed(n_freq)
-        self.net = make_mlp(2 + self.emb.dim, width, depth)
+        self.net = make_mlp(DIM + self.emb.dim, width, depth)
 
     def forward(self, x, t):
         return self.net(torch.cat([x, self.emb(as_col(t, x))], -1))
@@ -435,7 +494,7 @@ class FlowMapNet(nn.Module):
         super().__init__()
         self.cfg = dict(width=width, depth=depth, n_freq=n_freq)
         self.emb = TimeEmbed(n_freq)
-        self.net = make_mlp(2 + 2 * self.emb.dim, width, depth)
+        self.net = make_mlp(DIM + 2 * self.emb.dim, width, depth)
 
     def forward(self, x, t, r):
         return self.net(torch.cat([x, self.emb(as_col(t, x)), self.emb(as_col(r, x))], -1))
@@ -444,7 +503,7 @@ class FlowMapNet(nn.Module):
     def from_teacher(cls, teacher):
         """Copy the teacher and zero the r columns, so that u(x, t, r) = v_T(x, t) at init."""
         s = cls(**teacher.cfg).to(next(teacher.parameters()).device)
-        d = 2 + teacher.emb.dim
+        d = DIM + teacher.emb.dim
         with torch.no_grad():
             s.net[0].weight.zero_()
             s.net[0].weight[:, :d].copy_(teacher.net[0].weight)
@@ -891,7 +950,7 @@ def chord_triangle(u_fn, S, grid_t, v_fn=None):
         rs = torch.tensor(gt[:i], device=x.device, dtype=x.dtype)
         xx = x.repeat(i, 1)
         rr = rs.repeat_interleave(len(x))[:, None]
-        u = u_fn(xx, t, rr).reshape(i, len(x), 2)
+        u = u_fn(xx, t, rr).reshape(i, len(x), x.shape[1])
         ustar = (x[None] - S[:i]) / (t - rs)[:, None, None]
         e = ((u - ustar) ** 2).sum(-1).mean(1) / (ustar ** 2).sum(-1).mean(1)
         err[i, :i] = e.cpu().numpy()
@@ -1001,7 +1060,7 @@ def teacher_sha():
 
 def train_teacher(preset, device):
     cfg = preset.teacher
-    moons = Moons(preset.data.noise, device)
+    moons = make_data(preset.data.noise, device)
     net = VelocityNet(cfg.width, cfg.depth, cfg.n_freq).to(device)
     opt = torch.optim.AdamW(net.parameters(), lr=cfg.lr, weight_decay=0.0)
     ema = EMA(net, cfg.ema)
@@ -1033,13 +1092,13 @@ def build_caches(teacher, preset, device):
     """Ground truth reused by every student: reference samples, ODE endpoints, and states on
     teacher trajectories at the triangle grid times."""
     e = preset.eval
-    eps = cpu_randn((e.n, 2), 100).to(device)
+    eps = cpu_randn((e.n, DIM), 100).to(device)
     torch.save(dict(eps=eps.cpu(), x=teacher.rk4(eps, preset.teacher.ref_rk4).cpu()),
                TDIR / "teacher_ref.pt")
-    eps_c = cpu_randn((e.coupling_n, 2), 101).to(device)
+    eps_c = cpu_randn((e.coupling_n, DIM), 101).to(device)
     torch.save(dict(eps=eps_c.cpu(), end=teacher.rk4(eps_c, e.coupling_rk4).cpu()),
                TDIR / "gt_coupling.pt")
-    eps_t = cpu_randn((e.tri_states, 2), 102).to(device)
+    eps_t = cpu_randn((e.tri_states, DIM), 102).to(device)
     _, path = teacher.flow(eps_t, 1.0, 0.0, e.tri_rk4, return_path=True)
     stride = e.tri_rk4 // e.tri_nt
     S = path[::stride].flip(0)
@@ -1049,7 +1108,7 @@ def build_caches(teacher, preset, device):
 
 def evaluate_teacher(teacher, preset, device):
     e = preset.eval
-    moons = Moons(preset.data.noise, device)
+    moons = make_data(preset.data.noise, device)
     refs = load_refs(moons, preset.data.n_ref)
     A, A_lab, B = refs["A"][:e.n], refs["A_lab"][:e.n], refs["B"][:e.n]
     tau = tau_from_refs(A, B)
@@ -1086,7 +1145,7 @@ FIELDS = ("start", "x_pred", "query", "x_pos", "x_neg")
 def anchors(moons, device):
     """Fixed data points and the two noises of the construction."""
     data, _ = moons.fixed(N_ANCHOR, seed=951)
-    return data.to(device), cpu_randn((N_ANCHOR, 2), 952).to(device), cpu_randn((N_ANCHOR, 2), 953).to(device)
+    return data.to(device), cpu_randn((N_ANCHOR, DIM), 952).to(device), cpu_randn((N_ANCHOR, DIM), 953).to(device)
 
 
 def supported(variant):
@@ -1108,7 +1167,7 @@ def construction(variant, student, fake, teacher, data, eps1, eps2, drift=None):
         if est == "drift":
             with torch.no_grad():
                 x_pred = sample(student, eps1, 1, "chain")
-                y_neg = sample(student, cpu_randn((drift["n"], 2), 955).to(dev), 1, "chain")
+                y_neg = sample(student, cpu_randn((drift["n"], DIM), 955).to(dev), 1, "chain")
                 y_pos = drift["pos"]
                 d = x_pred.shape[1]
                 scale = torch.cat([torch.cdist(y_neg, y_pos), torch.cdist(y_neg, y_neg)], 1).mean() / d ** 0.5
@@ -1188,6 +1247,7 @@ def get_args(argv=None):
     p.add_argument("--k-roll", type=int, default=None)
     p.add_argument("--n-fm", type=int, default=None)
     p.add_argument("--steps", type=int, default=None)
+    p.add_argument("--batch", type=int, default=None)
     p.add_argument("--lr", type=float, default=None)
     p.add_argument("--fake-lr", type=float, default=None)
     p.add_argument("--diag-fake", action="store_true",
@@ -1290,7 +1350,8 @@ def cost_per_sample(est, policy, args, cfg):
 def train_student(args):
     preset = get_preset(args.preset)
     cfg = preset.student
-    cfg = replace(cfg, **{k: v for k, v in dict(steps=args.steps, k_roll=args.k_roll, n_fm=args.n_fm, lr=args.lr,
+    cfg = replace(cfg, **{k: v for k, v in dict(steps=args.steps, batch=args.batch, k_roll=args.k_roll,
+                                                 n_fm=args.n_fm, lr=args.lr,
                                                  fake_lr=args.fake_lr, snap_count=args.snap_count,
                                                  snap_n=args.snap_n).items()
                           if v is not None})
@@ -1318,7 +1379,7 @@ def train_student(args):
     shutil.rmtree(out / "milestones", ignore_errors=True)
 
     teacher = load_teacher(device)
-    moons = Moons(preset.data.noise, device)
+    moons = make_data(preset.data.noise, device)
     if args.init == "teacher":
         student = FlowMapNet.from_teacher(teacher.net)
     else:
@@ -1344,7 +1405,7 @@ def train_student(args):
     x_tref = ref["x"][:cfg.quick_n].to(device)
     gtc = torch.load(TDIR / "gt_coupling.pt")
     eps_c, end_c = gtc["eps"][:cfg.quick_n].to(device), gtc["end"][:cfg.quick_n].to(device)
-    eps_snap = cpu_randn((cfg.snap_n, 2), 200).to(device)
+    eps_snap = cpu_randn((cfg.snap_n, DIM), 200).to(device)
     # The anchor construction needs a fake that is conditioned on r, i.e. renoise DMD, or none (mf, drift).
     demo = supported(args.variant) and (est in ("mf", "drift") or (renoise_dmd and not kernel_neg))
     anchor_set = anchors(moons, device) if demo else None
@@ -1371,7 +1432,7 @@ def train_student(args):
     @torch.no_grad()
     def rollout(B, K):
         """Detached K-step student samples."""
-        return sample(student, torch.randn(B, 2, device=device), K, roll_sampler)
+        return sample(student, torch.randn(B, DIM, device=device), K, roll_sampler)
 
     def fm_step(xs):
         tf = torch.rand(len(xs), 1, device=device)
@@ -1386,11 +1447,11 @@ def train_student(args):
         """x_r: the student's jump to level r from a state x_s, which is its own K-step sampler state
         (on-policy) or noised data (off-policy). r = 0 at level r0; otherwise r is 0 or U(0, s)."""
         if policy == "on":
-            x_s, s0 = sample_prefix(student, torch.randn(B, 2, device=device), K, roll_sampler)
+            x_s, s0 = sample_prefix(student, torch.randn(B, DIM, device=device), K, roll_sampler)
             s = torch.full((B, 1), s0, device=device)
         else:
             s = draw_t(B)
-            x_s = (1 - s) * moons.sample(B) + s * torch.randn(B, 2, device=device)
+            x_s = (1 - s) * moons.sample(B) + s * torch.randn(B, DIM, device=device)
         r = torch.zeros_like(s)
         if level == "all":
             # r stays below 0.95: as r -> 1 the renoise gain a = (1 - t') / (1 - r) underflows in float32.
@@ -1425,7 +1486,7 @@ def train_student(args):
     def predict(B, K):
         if est == "drift":
             # A fresh K-step sample whose last step carries the gradient; drift builds its points around it.
-            x_q, t_jump = sample_prefix(student, torch.randn(drift_n, 2, device=device), K, roll_sampler)
+            x_q, t_jump = sample_prefix(student, torch.randn(drift_n, DIM, device=device), K, roll_sampler)
             tj = torch.full((drift_n, 1), t_jump, device=device)
             x_pred = x_q - tj * student(x_q, tj, torch.zeros_like(tj))
             return Pred(y=x_pred, t=torch.ones_like(tj), r=torch.zeros_like(tj), x_g=x_pred)
@@ -1435,12 +1496,12 @@ def train_student(args):
             return Pred(y=x_r, t=t, r=r, x_g=x_q)
         if est == "dmd" and args.dmd_jac == "teacher-ode":
             t = draw_t(B)
-            x_q = teacher.flow(torch.randn(B, 2, device=device), 1.0, t, cfg.sim_rk4)
+            x_q = teacher.flow(torch.randn(B, DIM, device=device), 1.0, t, cfg.sim_rk4)
             x_pred = x_q - t * student(x_q, t, torch.zeros_like(t))
             return Pred(y=x_pred, t=t, r=torch.zeros_like(t), x_g=x_q)
         if sample_dmd:
             # x_pred = last jump of a K-step sample: same law as the K-step rollouts v_phi was fitted to.
-            x_q, t_jump = sample_prefix(student, torch.randn(B, 2, device=device), K, roll_sampler)
+            x_q, t_jump = sample_prefix(student, torch.randn(B, DIM, device=device), K, roll_sampler)
             tj = torch.full((B, 1), t_jump, device=device)
             x_pred = x_q - tj * student(x_q, tj, torch.zeros_like(tj))
             if args.dmd_jac == "native":
@@ -1666,7 +1727,7 @@ def final_kl(root, refs, device, n):
     A, B = refs["A"][:n], refs["B"][:n]
     floor = dict(kl_rev=knn_kl(B, A), kl_fwd=knn_kl(A, B), sw2=sw2(B, A, 500))
     table = CSVLog(Path(root).parent / "final_kl.csv")
-    eps = cpu_randn((n, 2), 4242).to(device)
+    eps = cpu_randn((n, DIM), 4242).to(device)
     for run, _ in DEMO:
         for d in sorted(Path(root, run).glob("seed*")):
             student = load_net(d / "student_ema.pt", device)
@@ -1681,9 +1742,12 @@ def final_kl(root, refs, device, n):
 
 def export_distribution(root, preset_name, device):
     preset = get_preset(preset_name)
-    refs = load_refs(Moons(preset.data.noise, device), preset.data.n_ref)
+    data = make_data(preset.data.noise, device)
+    refs = load_refs(data, preset.data.n_ref)
     n_kl = 2000
     arrays = dict(data=refs["A"][:2000].numpy(), view=np.float32(VIEW))
+    if DIM == 3:
+        arrays.update(edges=data.edges(), view=np.float32(1.05 * refs["A"].abs().max().item()))
     meta = dict(runs=[r for r, _ in DEMO], labels=dict(DEMO))
     for run, _ in DEMO:
         seeds = sorted(Path(root, run).glob("seed*"))
@@ -1862,19 +1926,48 @@ def anim_directions(d, meta, fps, hold, k=3):
     write(frames, "directions", fps, hold)
 
 
-def anim_samples(d, meta, K, fps, hold):
+def frame3d(ax, view, edges, azim):
+    """3D panel: the filled cubes of the target as wireframes, a fixed box and a slowly turning camera."""
+    from mpl_toolkits.mplot3d.art3d import Line3DCollection
+    ax.add_collection3d(Line3DCollection(edges, colors="0.55", linewidths=0.5, alpha=0.6))
+    for set_lim in (ax.set_xlim, ax.set_ylim, ax.set_zlim):
+        set_lim(-view, view)
+    ax.set_box_aspect((1, 1, 1))
+    ax.view_init(elev=22, azim=azim)
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_zticks([])
+    for axis in (ax.xaxis, ax.yaxis, ax.zaxis):
+        axis.set_pane_color((1, 1, 1, 0))
+        axis.line.set_color("0.85")
+
+
+def anim_samples(d, meta, K, fps, hold, out_name=None):
     runs, labels = meta["runs"], meta["labels"]
     steps = d[f"{runs[0]}__snap_steps"]
     floor = meta["final_kl_floor"]
-    fig, axs = plt.subplots(2, 4, figsize=(16, 8.4), layout="constrained")
-    cloud_axes, (ax_rev, ax_fwd) = list(axs.flat[:6]), axs.flat[6:]
+    three_d = d["data"].shape[1] == 3
+    if three_d:
+        fig = plt.figure(figsize=(16, 8.4), layout="constrained")
+        cloud_axes = [fig.add_subplot(2, 4, i + 1, projection="3d") for i in range(6)]
+        ax_rev, ax_fwd = fig.add_subplot(2, 4, 7), fig.add_subplot(2, 4, 8)
+    else:
+        fig, axs = plt.subplots(2, 4, figsize=(16, 8.4), layout="constrained")
+        cloud_axes, (ax_rev, ax_fwd) = list(axs.flat[:6]), axs.flat[6:]
     frames = []
     for p in range(len(steps)):
         for ax, run in zip(cloud_axes, runs):
             ax.cla()
-            frame(ax)
-            dots(ax, d["data"], C["data"], s=1.5, alpha=0.18)
-            dots(ax, d[f"{run}__k{K}"][p], STYLE[run][0], s=2.0, alpha=0.55)
+            cloud = d[f"{run}__k{K}"][p]
+            if three_d:
+                # One full turn of the camera over the animation, so the depth of the cubes can be read.
+                frame3d(ax, float(d["view"]), d["edges"], azim=-60 + 360 * p / len(steps))
+                ax.scatter(*cloud.T, s=min(3.0, 6000 / len(cloud)), c=STYLE[run][0], alpha=0.6, lw=0,
+                           depthshade=False)
+            else:
+                frame(ax)
+                dots(ax, d["data"], C["data"], s=1.5, alpha=0.18)
+                dots(ax, cloud, STYLE[run][0], s=2.0, alpha=0.55)
             kl = d[f"{run}__kl_rev_k{K}"][0, p]
             ax.set_title(f"{labels[run]}\nKL(student || data) = {kl:.3f}", fontsize=9)
         for ax, key, name, fl in ((ax_rev, "rev", "KL(student || data)  [reverse]", floor["kl_rev"]),
@@ -1891,15 +1984,16 @@ def anim_samples(d, meta, K, fps, hold):
             ax.title.set_fontsize(9)
             ax.tick_params(labelsize=7)
         ax_rev.legend(fontsize=7, loc="upper right")
-        fig.suptitle(f"{K}-step samples over training (data in blue)   step {int(steps[p])}", fontsize=12)
+        target = "the 14 cubes of the 3D checkerboard as wireframes" if three_d else "data in blue"
+        fig.suptitle(f"{K}-step samples over training ({target})   step {int(steps[p])}", fontsize=12)
         frames.append(grab(fig))
     plt.close(fig)
-    write(frames, f"samples_k{K}", fps, hold)
+    write(frames, out_name or f"samples_k{K}", fps, hold)
 
 
 def anim_single(root, run, name, title, preset_name, fps, hold, n_kl=2000):
     """One method: 1-step and 2-step samples over training, and its KL to the data (mean over seeds)."""
-    refs = load_refs(Moons(get_preset(preset_name).data.noise, "cpu"), get_preset(preset_name).data.n_ref)
+    refs = load_refs(make_data(get_preset(preset_name).data.noise, "cpu"), get_preset(preset_name).data.n_ref)
     A, B = refs["A"][:n_kl], refs["B"][:n_kl]
     floor = knn_kl(B, A)
     snaps = [np.load(d / "snapshots.npz") for d in sorted(Path(root, run).glob("seed*"))]
@@ -1935,6 +2029,184 @@ def anim_single(root, run, name, title, preset_name, fps, hold, n_kl=2000):
 
 
 # ====================================================================================================
+# Section 1: the teacher's ODE with K Euler steps, and the flow map on one trajectory
+# ====================================================================================================
+STEP_KS = tuple(range(1, 65))
+
+
+@torch.no_grad()
+def teacher_steps(preset_name="smoke", device="cpu", n=4000):
+    """K-step Euler samples of the teacher for K = 1..64 and a fine RK4 solve from the same noises, with their
+    SW2 and KL(samples || data) to held-out data, and the data-against-data floor."""
+    preset, dev = get_preset(preset_name), pick_device(device)
+    teacher = load_teacher(dev)
+    refs = load_refs(make_data(preset.data.noise, dev), preset.data.n_ref)
+    A, B = refs["A"][:n], refs["B"][:n]
+    eps = cpu_randn((n, DIM), 4343).to(dev)
+    ref = teacher.rk4(eps, 100)
+    clouds, sws, kls = [], [], []
+    for K in STEP_KS:
+        x = teacher.euler(eps, K)
+        clouds.append(x.cpu().numpy())
+        sws.append(sw2(x, A, 500))
+        kls.append(knn_kl(x, A))
+    return dict(ks=np.array(STEP_KS), clouds=np.stack(clouds), sw2=np.array(sws), kl=np.array(kls),
+                ref=ref.cpu().numpy(), ref_sw2=sw2(ref, A, 500), ref_kl=knn_kl(ref, A),
+                floor_sw2=sw2(B, A, 500), floor_kl=knn_kl(B, A), data=A.cpu().numpy())
+
+
+def anim_teacher_steps(d, fps, hold, n_show=2000):
+    """K-step Euler samples of the teacher next to the fine ODE solve, and the two metrics against K."""
+    fig, axs = plt.subplots(1, 4, figsize=(17, 4.7), layout="constrained",
+                            gridspec_kw=dict(width_ratios=[1, 1, 1.2, 1.2]))
+    frames = []
+    for p, K in enumerate(d["ks"]):
+        for ax, x, title in ((axs[0], d["clouds"][p], f"{K}-step Euler sampling"),
+                             (axs[1], d["ref"], "fine ODE solve (RK4, 100 steps)")):
+            ax.cla()
+            frame(ax)
+            dots(ax, d["data"][:n_show], C["data"], s=1.5, alpha=0.18)
+            dots(ax, x[:n_show], C["teacher"], s=2.0, alpha=0.55)
+            ax.set_title(title, fontsize=11)
+        for ax, key, name in ((axs[2], "sw2", "SW2 to the data"), (axs[3], "kl", "KL(samples || data)")):
+            ax.cla()
+            ax.plot(d["ks"], d[key], c=C["teacher"], lw=1.8, label="K-step Euler")
+            ax.scatter([K], [d[key][p]], c=C["teacher"], s=40, zorder=5)
+            ax.axhline(d[f"ref_{key}"], c=C["teacher"], lw=1, ls="--", label="fine ODE solve")
+            ax.axhline(d[f"floor_{key}"], c="k", lw=0.8, ls=(0, (1, 2)), label="data vs data floor")
+            ax.set_xscale("log", base=2)
+            ax.set_yscale("symlog", linthresh=0.05)
+            ax.set_ylim(bottom=-0.01)
+            ax.set(xlabel="number of steps K", title=f"{name} = {d[key][p]:.3f}")
+            ax.title.set_fontsize(11)
+            ax.legend(fontsize=8, loc="upper right")
+        fig.suptitle(f"The teacher's ODE from noise to data with K Euler steps (data in blue)   K = {K}", fontsize=12)
+        frames.append(grab(fig))
+    plt.close(fig)
+    write(frames, "teacher_steps", fps, hold)
+
+
+def anim_flow_map(fps, hold, n_ode=48, n_jump=20, n_tan=16, n_zero=16, pause=6):
+    """The schematic of f2_tangent_vs_chord (a), animated: ODE sampling along the trajectory with the tangent at
+    every step, then one jump along the secant (average velocity, flow map), then one Euler step along the
+    tangent at x_t (tangent point), then all three continued to level 0 with the distributions they produce."""
+    with matplotlib.rc_context(FIG_RC):
+        _anim_flow_map(fps, hold, n_ode, n_jump, n_tan, n_zero, pause)
+
+
+def _anim_flow_map(fps, hold, n_ode, n_jump, n_tan, n_zero, pause):
+    x_t = np.array([0.0, 0.0])
+    x_r = np.array([S_R, teacher_curve(S_R)])
+    x_tan = np.array([S_R, TEACHER_SLOPE * S_R])
+    slope = lambda s: TEACHER_SLOPE - 2 * 1.25 * s
+    fig = plt.figure(figsize=(7.2, 4.9))
+    ax = fig.add_axes([0.0, 0.0, 1.0, 0.86])
+    title_text = fig.text(0.5, 0.97, "", ha="center", va="top", fontsize=12.5, linespacing=1.4)
+
+    def base(title):
+        ax.cla()
+        level_axis(ax)
+        ax.set_ylim(-0.42, 1.12)
+        gradient_curve(ax, teacher_curve, 1.0, alpha=0.3)
+        dot(ax, x_t, "k")
+        ax.text(x_t[0] + 0.01, x_t[1] - 0.09, "$x_t$", fontsize=13, va="top")
+        ax.plot([], [], c="#8E8AB8", lw=4, label="teacher ODE trajectory")
+        ax.legend(loc="upper left", bbox_to_anchor=(0.0, 1.0), frameon=False, fontsize=9.5)
+        title_text.set_text(title)
+
+    def flow_map_drawn():
+        gradient_curve(ax, teacher_curve, S_R)
+        arrow(ax, x_t, x_r, "k", lw=2.2)
+        dot(ax, x_r, "k")
+        ax.text(x_r[0] + 0.03, x_r[1] - 0.13, "flow map $x_r$\n$X[x_t, u, r]$", ha="left", fontsize=11)
+
+    frames = []
+    for s in np.linspace(0.0, S_R, n_ode):
+        base("ODE sampling follows the trajectory in many small steps,\n"
+             "each along the tangent $v(x_s, s)$")
+        if s > 0:
+            gradient_curve(ax, teacher_curve, S_R, s_stop=s)
+        d = np.array([1.0, slope(s)])
+        p = np.array([s, teacher_curve(s)])
+        arrow(ax, p, p + 0.22 * d / np.linalg.norm(d), FC["grey"], lw=2.0, z=6)
+        dot(ax, p, "k", z=7)
+        ax.text(p[0], p[1] + 0.07, "$v(x_s, s)$", color="0.35", fontsize=11, ha="right")
+        frames.append(grab(fig))
+    frames += [frames[-1]] * pause
+
+    title_jump = "the average velocity $u(x_t, t, r)$ jumps along the secant\nin one step and lands on the flow map $x_r$"
+    for a in np.linspace(0.05, 1.0, n_jump):
+        base(title_jump)
+        gradient_curve(ax, teacher_curve, S_R)
+        p = x_t + a * (x_r - x_t)
+        arrow(ax, x_t, p, "k", lw=2.2)
+        dot(ax, p, "k", z=7)
+        if a >= 1:
+            ax.text(x_r[0] + 0.03, x_r[1] - 0.13, "flow map $x_r$\n$X[x_t, u, r]$", ha="left", fontsize=11)
+        frames.append(grab(fig))
+    frames += [frames[-1]] * pause
+
+    for a in np.linspace(0.05, 1.0, n_tan):
+        base("one Euler step along the tangent at $x_t$ lands at the\ntangent point, off the trajectory")
+        flow_map_drawn()
+        q = x_t + a * (x_tan - x_t)
+        arrow(ax, x_t, q, FC["grey"], ls="--", lw=2.0)
+        dot(ax, q, FC["grey"])
+        if a >= 1:
+            ax.annotate("", xy=(S_R + 0.035, x_tan[1]), xytext=(S_R + 0.035, x_r[1]),
+                        arrowprops=dict(arrowstyle="<->", color=FC["neg"], lw=1.3))
+            ax.text(S_R + 0.06, (x_tan[1] + x_r[1]) / 2, "curvature\ngap", color=FC["neg"], fontsize=10,
+                    va="center")
+            ax.text(x_tan[0] + 0.03, x_tan[1] + 0.02, "tangent point\n$X[x_t, v, r]$", ha="left", va="bottom",
+                    fontsize=11, color="0.25")
+        frames.append(grab(fig))
+    frames += [frames[-1]] * pause
+
+    # Continued to level 0: the trajectory and the secant end at x_0, one Euler step with v lands far away.
+    # Outputs from states spread around x_t give a peak at each endpoint, and the two peaks do not overlap.
+    x_0 = np.array([1.0, teacher_curve(1.0)])
+    x_eul = np.array([1.0, TEACHER_SLOPE])
+    sigma, amp = 0.09, 0.3
+    ys = np.linspace(-4, 4, 200) * sigma
+    bump = np.exp(-0.5 * (ys / sigma) ** 2)
+    title_zero = ("continued to level 0, the trajectory and the secant both end at $x_0$,\n"
+                  "while one Euler step with $v$ lands far away")
+
+    def zero_frame(a_arrow, zoom, a_dist):
+        base(title_zero)
+        ax.set_xlim(-0.12, 1.15 + 0.2 * zoom)
+        ax.set_ylim(-0.42, 1.12 + 0.8 * zoom)
+        gradient_curve(ax, teacher_curve, 1.0)
+        arrow(ax, x_t, x_t + a_arrow * (x_0 - x_t), "k", lw=2.2)
+        arrow(ax, x_t, x_t + a_arrow * (x_eul - x_t), FC["grey"], ls="--", lw=2.0)
+        dot(ax, x_tan, FC["grey"], s=30)
+        if a_dist > 0:
+            for centre, c in ((x_0[1], "#4C72B0"), (x_eul[1], FC["grey"])):
+                ax.fill_betweenx(centre + ys, 1 - a_dist * amp * bump, 1, color=c, alpha=0.35, lw=0, zorder=3)
+                ax.plot(1 - a_dist * amp * bump, centre + ys, c=c, lw=1.2, zorder=3)
+        dot(ax, x_t + a_arrow * (x_0 - x_t), "k", z=7)
+        dot(ax, x_t + a_arrow * (x_eul - x_t), FC["grey"], z=7)
+        if a_arrow >= 1:
+            ax.text(1.03, x_0[1] - 0.02, "$x_0 = X[x_t, u, 0]$", fontsize=11, va="center")
+            ax.text(1.03, x_eul[1] + 0.02, "$X[x_t, v, 0]$", fontsize=11, va="center", color="0.25")
+        if a_dist >= 1:
+            ax.text(1 - amp - 0.02, x_0[1], "along the trajectory\nor the secant", ha="right", va="center",
+                    fontsize=10, color="#4C72B0")
+            ax.text(1 - amp - 0.02, x_eul[1], "one Euler step\nwith $v$", ha="right", va="center", fontsize=10,
+                    color="0.35")
+            ax.annotate("", xy=(1.06, x_eul[1] - 0.12), xytext=(1.06, x_0[1] + 0.12),
+                        arrowprops=dict(arrowstyle="<->", color=FC["neg"], lw=1.3))
+            ax.text(1.09, (x_0[1] + x_eul[1]) / 2, "the two\ndistributions\ndo not match", color=FC["neg"],
+                    fontsize=10, va="center")
+        return grab(fig)
+
+    frames += [zero_frame(a, a, 0.0) for a in np.linspace(0.05, 1.0, n_zero)]
+    frames += [zero_frame(1.0, 1.0, a) for a in np.linspace(0.1, 1.0, n_zero // 2)]
+    plt.close(fig)
+    write(frames, "flow_map", fps, hold)
+
+
+# ====================================================================================================
 # Section 8: pos / neg from N samples (native drift, FM-ideal drift, semi-drift): exports, figure, animations
 # ====================================================================================================
 NS = (2, 4, 8, 16, 64, 256, 1024)
@@ -1957,13 +2229,13 @@ default_root = lambda family: ART / family / "runs"
 def export_kernel(family, root, preset_name, device):
     run_of = FAMILIES[family]["run"]
     preset = get_preset(preset_name)
-    refs = load_refs(Moons(preset.data.noise, device), preset.data.n_ref)
+    refs = load_refs(make_data(preset.data.noise, device), preset.data.n_ref)
     A, B = refs["A"], refs["B"]
     n_kl, n = 2000, preset.data.n_ref
     arrays = dict(data=A[:2000].numpy())
     floor = dict(kl_rev=knn_kl(B[:n], A[:n]), kl_fwd=knn_kl(A[:n], B[:n]))
     table = CSVLog(Path(root).parent / "final_kl.csv")
-    eps = cpu_randn((n, 2), 4242).to(device)
+    eps = cpu_randn((n, DIM), 4242).to(device)
     for N in NS:
         run = run_of(N)
         seeds = sorted(Path(root, run).glob("seed*"))
@@ -2230,10 +2502,14 @@ def level_axis(ax):
     ax.axis("off")
 
 
-def gradient_curve(ax, f, s_end, c0="#E8A04F", c1="#4C72B0", lw=4, alpha=1.0):
+def gradient_curve(ax, f, s_end, c0="#E8A04F", c1="#4C72B0", lw=4, alpha=1.0, s_stop=None):
+    """Curve from 0 to s_end coloured from c0 to c1; with s_stop, only the part up to s_stop is drawn, in the
+    colours it has in the full curve."""
     s = np.linspace(0, s_end, 120)
     y = f(s)
     for i in range(len(s) - 1):
+        if s_stop is not None and s[i] >= s_stop:
+            break
         a = i / (len(s) - 2)
         c = tuple((1 - a) * np.array(matplotlib.colors.to_rgb(c0)) + a * np.array(matplotlib.colors.to_rgb(c1)))
         ax.plot(s[i:i + 2], y[i:i + 2], c=c, lw=lw, alpha=alpha, solid_capstyle="round", zorder=2)
@@ -2386,6 +2662,58 @@ def f_pull_push_anchors(step=200, k=3):
     print(f"[figures] {MATERIALS / 'pull_push_anchors.png'}")
 
 
+@matplotlib.rc_context(FIG_RC)
+def f_teaser(run="dmd-on-all", step=200, k=3):
+    """Poster-style teaser of the post: the student's one-step samples at an early step, and on a few of them the
+    attraction toward x_pos, the repulsion from x_neg and the update, above the pull-push gradient."""
+    d = np.load(ART / "assets" / "distribution_demo.npz")
+    p = int(np.searchsorted(d[f"{run}__snap_steps"], step))
+    xp, pos, neg = (d[f"{run}__c__{f}"][p] for f in ("x_pred", "x_pos", "x_neg"))
+    upd = pos - neg
+    size = np.linalg.norm(upd, axis=1)
+    chosen = farthest_points(xp, k, size >= np.quantile(size, 0.3))
+    scale = max(1.0, round(0.5 / np.median(size[chosen])))
+    fig = plt.figure(figsize=(6.4, 5.4))
+    ax = fig.add_axes([0.03, 0.17, 0.94, 0.67])
+    data, cloud = d["data"], d[f"{run}__k1"][p]
+    ax.scatter(*data.T, s=2.5, c="#4C72B0", alpha=0.22, lw=0, zorder=0)
+    ax.scatter(*cloud[:1500].T, s=2.5, c=FC["student"], alpha=0.28, lw=0, zorder=1)
+    for i in chosen:
+        arrow(ax, xp[i], pos[i], FC["teacher"], lw=2.2)
+        arrow(ax, xp[i], 2 * xp[i] - neg[i], FC["neg"], lw=2.2)
+        arrow(ax, xp[i], xp[i] + scale * upd[i], "k", lw=2.8, z=6)
+        dot(ax, pos[i], FC["teacher"], s=70)
+        dot(ax, neg[i], FC["neg"], s=70)
+        dot(ax, xp[i], "k", s=85, z=7)
+    shown = np.concatenate([xp[chosen], pos[chosen], neg[chosen], (2 * xp - neg)[chosen],
+                            (xp + scale * upd)[chosen]])
+    lo = np.minimum(np.quantile(data, 0.005, axis=0), shown.min(0)) - 0.2
+    hi = np.maximum(np.quantile(data, 0.995, axis=0), shown.max(0)) + 0.2
+    hi[1] += 0.45 * (hi[1] - lo[1])
+    ax.set_xlim(lo[0], hi[0])
+    ax.set_ylim(lo[1], hi[1])
+    ax.set_aspect("equal", adjustable="datalim")
+    ax.axis("off")
+    ax.legend(handles=[
+        plt.Line2D([], [], marker="o", ls="", c="k", label="$x_{\\mathrm{pred}}$, the moved sample"),
+        plt.Line2D([], [], c=FC["teacher"], lw=2.2, label="pull toward $x_{\\mathrm{pos}}$"),
+        plt.Line2D([], [], c=FC["neg"], lw=2.2, label="push away from $x_{\\mathrm{neg}}$"),
+        plt.Line2D([], [], c="k", lw=2.8, label="update $x_{\\mathrm{pos}} - x_{\\mathrm{neg}}$"),
+    ], loc="upper right", fontsize=9.5, frameon=True, framealpha=0.9, edgecolor="0.85")
+    fig.text(0.04, 0.95, "Contrastive Generation", fontsize=19, color="#002336", va="top")
+    fig.text(0.04, 0.885, "one update behind MeanFlow, DMD and drifting models", fontsize=11.5, color="0.35", va="top")
+    fig.text(0.5, 0.11, "$\\nabla_\\theta\\mathcal{L} = -2W\\,\\left(\\partial x_{\\mathrm{pred}}/\\partial\\theta\\right)^{\\top}"
+             "\\left(x_{\\mathrm{pos}} - x_{\\mathrm{neg}}\\right)$", fontsize=15, ha="center", va="center",
+             bbox=dict(boxstyle="round,pad=0.45", fc="white", ec="#9b3022", lw=1.2))
+    fig.text(0.5, 0.035, "negative from the student (MeanFlow)  ·  a fake network (DMD)  ·  sample kernels (drifting)",
+             fontsize=8.6, color="0.35", ha="center", va="center")
+    fig.add_artist(plt.Line2D([0.04, 0.96], [0.855, 0.855], color="#9b3022", lw=1.2))
+    for ext in ("png", "svg"):
+        fig.savefig(MATERIALS / f"teaser.{ext}", dpi=200, facecolor="white")
+    plt.close(fig)
+    print(f"[figures] {MATERIALS / 'teaser.png'}")
+
+
 # ====================================================================================================
 # orchestration: what the notebook calls
 # ====================================================================================================
@@ -2449,6 +2777,24 @@ def table_kernel():
         print(f"| {N} | " + " | ".join(cells) + " |")
 
 
+def run_distribution(preset_name="smoke", device="cpu", steps=3000, batch=None, snap_n=2000, seeds=(0, 1, 2),
+                     parallel=12, fps=8, hold=12):
+    """The six students of Section 6 on the dataset selected by CG_DATA: the teacher (reused if trained), the
+    runs, the export, the table and the sample animations, written to materials/<data>_samples_k{1,2}."""
+    run_teacher(preset_name, device, skip_train=(TDIR / "teacher.pt").exists())
+    root = ART / "distribution" / "runs"
+    common = ["--preset", preset_name, "--device", device, "--steps", str(steps), "--snap-count", "61",
+              "--snap-n", str(snap_n), *(["--batch", str(batch)] if batch else [])]
+    run_jobs([["--variant", run, "--seed", str(s), "--root", str(root), *common] for run, _ in DEMO for s in seeds],
+             parallel)
+    d = np.load(export_distribution(root, preset_name, pick_device(device)))
+    meta = json.loads(str(d["meta"]))
+    table_distribution(root)
+    prefix = "" if DATA == "moons" else f"{DATA}_"
+    for K in (1, 2):
+        anim_samples(d, meta, K, fps, hold, out_name=f"{prefix}samples_k{K}")
+
+
 def sw2_curves(root, runs, steps=(0, 200, 500, 1000, 2000, 3000)):
     """One-step SW2 to the teacher's samples at a few training steps, mean over seeds (quick evaluations)."""
     print(f"{'run':28s}" + "".join(f"{s:>10d}" for s in steps))
@@ -2469,8 +2815,19 @@ def cli(argv=None):
         run_teacher(a.preset, a.device, a.skip_train)
     elif argv[:1] == ["train"]:
         train_student(get_args(argv[1:]))
+    elif argv[:1] == ["distribution"]:
+        p = argparse.ArgumentParser(prog="assess.py distribution")
+        p.add_argument("--preset", default="smoke")
+        p.add_argument("--device", default="cpu")
+        p.add_argument("--steps", type=int, default=3000)
+        p.add_argument("--batch", type=int, default=None, help="student batch (default: the preset's)")
+        p.add_argument("--snap-n", type=int, default=2000, help="samples per animation frame")
+        p.add_argument("--parallel", type=int, default=12)
+        a = p.parse_args(argv[1:])
+        run_distribution(a.preset, a.device, a.steps, a.batch, a.snap_n, parallel=a.parallel)
     else:
-        raise SystemExit("usage: python assess.py teacher [...] | python assess.py train --variant ... [...]")
+        raise SystemExit("usage: python assess.py teacher [...] | python assess.py train --variant ... [...] | "
+                         "CG_DATA=checker3d python assess.py distribution [...]")
 
 
 if __name__ == "__main__":

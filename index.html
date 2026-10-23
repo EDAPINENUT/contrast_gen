@@ -12,6 +12,7 @@ Pulling and Pushing Its Samples | Haitao Lin</title>
 Few-Step Generator by Pulling and Pushing Its Samples">
   <meta property="og:description" content="MeanFlow, Distribution Matching Distillation and drifting models as one pull-push update: a few-step generator moves its samples toward a positive and away from a negative.">
   <meta property="og:type" content="article">
+  <meta property="og:image" content="https://edapinenut.github.io/contrast_gen.edapinenut.github.io/materials/teaser.png">
 
   <link rel="shortcut icon" href="site/ht.jpeg">
   <link rel="stylesheet" href="site/main.css">
@@ -102,7 +103,7 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
     <nav class="site-nav">
       <div class="trigger">
         <a class="page-link" href="https://edapinenut.github.io/"><b>Home</b></a>
-        <a class="page-link" href="https://edapinenut.github.io/#blog"><b>Blog</b></a>
+        <a class="page-link" href="https://edapinenut.github.io/#blogs"><b>Blog</b></a>
         <a class="page-link" href="https://github.com/EDAPINENUT/contrast_gen.edapinenut.github.io"><b>Code</b></a>
       </div>
     </nav>
@@ -152,15 +153,13 @@ models</a></li>
   <div class="post-body">
 <p>A few-step generator turns noise into a sample with one or a few
 network calls. This post shows that two common ways of training such a
-generator, MeanFlow and Distribution Matching Distillation (DMD), use
-the same update. Each update moves a point produced by the generator
-toward a <em>positive</em> point, which carries information about the
-data, and away from a <em>negative</em> point, which describes the
-generator itself. The two methods differ in how they obtain the negative
-and in which state they build the two points from. The recently proposed
-drifting models use the same update as well, with both points estimated
-directly from samples. Section 1 introduces the velocities and the
-one-step map in which all of these constructions are written.</p>
+generator, with MeanFlow, Distribution Matching Distillation (DMD) and
+the recently proposed Drifting Models, use the same update. Each update
+moves a point produced by the generator toward a <em>positive</em>
+point, which carries information about the data, and away from a
+<em>negative</em> point, which describes the generator itself. These
+methods differ in how they obtain the negative and in which state they
+build the two points from.</p>
 <p>All pictures and numbers in this post come from one 2D toy problem,
 the two-moons dataset, with a flow-matching teacher and students
 distilled from it.</p>

@@ -2,7 +2,7 @@
 
 <!-- F1: title figure, a still from V5 (to render) -->
 
-A few-step generator turns noise into a sample with one or a few network calls. This post shows that two common ways of training such a generator, MeanFlow and Distribution Matching Distillation (DMD), use the same update. Each update moves a point produced by the generator toward a *positive* point, which carries information about the data, and away from a *negative* point, which describes the generator itself. The two methods differ in how they obtain the negative and in which state they build the two points from. The recently proposed drifting models use the same update as well, with both points estimated directly from samples. Section 1 introduces the velocities and the one-step map in which all of these constructions are written.
+A few-step generator turns noise into a sample with one or a few network calls. This post shows that three ways of training such a generator, MeanFlow, Distribution Matching Distillation (DMD) and the recently proposed drifting models, use the same update. Each update moves a point produced by the generator toward a *positive* point, which carries information about the data, and away from a *negative* point, which describes the generator itself. The methods differ in how they obtain the negative and in which state they build the two points from.
 
 All pictures and numbers in this post come from one 2D toy problem, the two-moons dataset, with a flow-matching teacher and students distilled from it.
 
@@ -30,9 +30,11 @@ Following a velocity backward to level 0 shows what it encodes. Extending a segm
 
 <!-- V1: ConditionalToMarginal. Segments through one x_t, weighted by the posterior, average into the marginal arrow; t = 0.8, 0.5, 0.2 (to render) -->
 
-**ODE trajectories.** Integrating $dx/dt = v(x,t)$ from $t=1$ to $t=0$ carries noise onto the moons. Unlike the conditional segments, these trajectories never cross, and they are curved. Following them accurately takes many small steps, that is, many network calls, or function evaluations (NFE). Given a state $x_t$, we write $x_s$ for the point at level $s$ on the ODE trajectory through $x_t$. The ODE carries $p_{\text{data},t}$ to $p_{\text{data},s}$, so $x_s$ has the same distribution as the interpolation at level $s$, but it is a deterministic function of $x_t$ rather than a new interpolation sample.
+**ODE trajectories.** Integrating $dx/dt = v(x,t)$ from $t=1$ to $t=0$ carries noise to data. Unlike the conditional segments, these trajectories never cross, and they are curved. Following them accurately takes many small steps, that is, many network calls. Given a state $x_t$, we write $x_s$ for the point at level $s$ on the ODE trajectory through $x_t$. The ODE carries $p_{\text{data},t}$ to $p_{\text{data},s}$, so $x_s$ has the same distribution as the interpolation at level $s$, but it is a deterministic function of $x_t$ rather than a new interpolation sample.
 
-<!-- V2: MarginalODE. Teacher field over t, 400 particles flowing to the moons, two Euler steps missing them (to render) -->
+In practice $v$ has no closed form. It is replaced by a network $v_{\text{teacher}}$ trained by flow matching, which we call the *teacher*. The animation below integrates the teacher's ODE with $K$ uniform Euler steps, for every $K$ from 1 to 64, and compares the samples with a fine solve of the same ODE from the same noises (fourth-order Runge-Kutta, RK4, with 100 steps). It measures the samples against held-out data in two ways, with SW2, the sliced 2-Wasserstein distance, and with KL, the divergence $\mathrm{KL}(\text{samples}\,\|\,\text{data})$ estimated from nearest neighbours (Section 6). With one step, every sample moves to the posterior mean $\mathbb E[x_0\mid x_1]$, which is close to the mean of the data, so the samples collapse to the centre (KL 10.2). The error falls steadily as $K$ grows. SW2 reaches the level of the fine solve at about 16 steps, while the KL needs more, 0.06 at 32 steps and 0.03 at 64, against 0.03 for the fine solve. A diffusion or flow model therefore needs tens of network calls before its samples are reliable, and this is the cost a few-step generator is meant to remove.
+
+![The teacher's ODE from noise to data with K uniform Euler steps, for K = 1 to 64. Left, the K-step samples (green) against held-out data (blue). Second panel, a fine ODE solve from the same noises. Right, SW2 and KL(samples || data) against K, with the fine solve (dashed) and the value between two sets of data samples (dotted).](materials/teacher_steps.gif)
 
 **Average velocity and flow map.** A few-step generator does not follow the curved trajectory. It jumps from $x_t$ directly to a point at a lower level $r<t$. The velocity that makes this jump exact is the *average velocity* over $[r,t]$,
 
@@ -46,17 +48,19 @@ $$
 x_r = x_t - (t-r)\,u(x_t,t,r).
 $$
 
-Once $u$ is known, an exact jump is a single subtraction. The same subtraction can be carried out with any velocity $v$, and we write it as
+Once $u$ is known, an exact jump is a single subtraction. The same subtraction can be carried out with any velocity $\omega$, and we write it as
 
 $$
-X[x_t, v, r] \;=\; x_t - (t-r)\,v .
+X[x_t, \omega, r] \;=\; x_t - (t-r)\,\omega .
 $$
 
-The start level of $X$ is the level of its first argument, so $X[x_{t'},v,0]$ starts at level $t'$. We reserve the name flow map for $X[x_t,u,r]=x_r$, the case with the exact average velocity, and call $X[x_t,v,r]$ with any other velocity a *one-step map*. With the instantaneous velocity $v(x_t,t)$, the one-step map is one Euler step. Its endpoint lies on the tangent line of the trajectory at $x_t$, and we call it the **tangent point**. The tangent point misses $x_r$ whenever the trajectory curves between $t$ and $r$. A $K$-step sampler chooses levels $1=t_0>t_1>\dots>t_K=0$ and, starting from $\epsilon$, applies $K$ one-step maps in sequence.
+The start level of $X$ is the level of its first argument, so $X[x_{t'},\omega,0]$ starts at level $t'$. When the second argument is a velocity field, it is evaluated at the start, so $X[x_t,v,r]$ stands for $X[x_t,v(x_t,t),r]$ and $X[x_t,u,r]$ for $X[x_t,u(x_t,t,r),r]$. We reserve the name flow map for $X[x_t,u,r]=x_r$, the case with the exact average velocity, and call $X[x_t,\omega,r]$ with any other velocity a *one-step map*. With the instantaneous velocity, $X[x_t,v,r]$ is one Euler step. Its endpoint lies on the tangent line of the trajectory at $x_t$, and we call it the **tangent point**. The tangent point misses $x_r$ whenever the trajectory curves between $t$ and $r$. A $K$-step sampler chooses levels $1=t_0>t_1>\dots>t_K=0$ and, starting from $\epsilon$, applies $K$ one-step maps in sequence.
 
-In practice $v$ is replaced by a teacher network $v_{\text{teacher}}$ trained by flow matching. From Section 2 on, the ODE, its trajectories, the average velocity $u$ and the flow map all refer to the teacher's field.
+The animation below shows these objects on a schematic trajectory, drawn with the noise level on the horizontal axis. ODE sampling moves the point along the trajectory in many small steps, each in the direction of the tangent $v(x_s,s)$. The average velocity instead covers the same distance in one jump along the secant from $x_t$ to $x_r$, and its endpoint $X[x_t,u,r]=x_r$ is the flow map. One Euler step along the tangent at $x_t$ ends at the tangent point $X[x_t,v,r]$, away from the trajectory. The last part of the animation continues all three to level 0. Following the trajectory and jumping once along the secant both end at the trajectory's endpoint $x_0 = X[x_t,u,0]$, so states spread around $x_t$ produce outputs peaked at $x_0$. One Euler step with $v$ produces outputs peaked far from it, and the two distributions do not overlap.
 
-<!-- V3: AverageVelocitySecant. Tangent at x_t vs flow maps to x_r as r slides from t to 0; flow-map chains stay on the trajectory, Euler chains drift off (to render) -->
+![A schematic ODE trajectory from level t to level r, with the noise level on the horizontal axis. First, ODE sampling follows the trajectory in small steps, with the tangent (the instantaneous velocity) drawn at the current point. Then the average velocity makes one jump along the secant from x_t to x_r, which is the flow map X[x_t, u, r]. Then one Euler step along the tangent at x_t lands at the tangent point X[x_t, v, r], off the trajectory. Last, all three are continued to level 0. The trajectory and the secant both end at x_0 = X[x_t, u, 0], and the outputs they produce peak there (blue), while the outputs of one Euler step with v peak far away (grey), so the two distributions do not match.](materials/flow_map.gif)
+
+From Section 2 on, the ODE, its trajectories, the average velocity $u$ and the flow map all refer to the teacher's field.
 
 ---
 
@@ -177,7 +181,7 @@ $$
 x_{\text{neg}} = X[x_t, v_{\text{student}}, r].
 $$
 
-The difference of the two points, $x_{\text{pos}} - x_{\text{neg}} = -(t-r)\,(v_{\text{teacher}} - v_{\text{student}})$, no longer contains the curvature gap. It compares only the two instantaneous velocities and vanishes once they agree, however curved the trajectory is. This difference is what moves the student's prediction $\hat x^\theta_r$.
+The difference of the two points, $x_{\text{pos}} - x_{\text{neg}} = -(t-r)\,(v_{\text{teacher}} - v_{\text{student}})$, no longer depends on how far the tangent point is from $x_r$. It compares only the two instantaneous velocities and vanishes once they agree, however curved the trajectory is. This difference is what moves the student's prediction $\hat x^\theta_r$.
 
 ![Flow maps from one intermediate state x_t. (a) One teacher call gives the tangent point X[x_t, v_teacher, r], which misses the flow map x_r on the curved trajectory. (b) The positive is the teacher's tangent point and the negative is the student's tangent point, and their difference x_pos - x_neg moves the student's prediction X[x_t, u_theta, r].](materials/f2_tangent_vs_chord.png)
 
@@ -222,8 +226,8 @@ so that $v_{\text{teacher}}-v_\phi = -(x_{\text{pos}}-x_{\text{neg}})/t'$. DMD i
 
 The two methods also build their points from different states.
 
-- MeanFlow builds all three points from one state. The moved point $\hat x^\theta_r$, the positive and the negative are one-step maps from the same $x_t$ to the same level $r$, with three different velocities, namely the student's average velocity, the teacher's instantaneous velocity and the student's induced instantaneous velocity. The negative contains $\mathrm{sg}(u_\theta)$ at that same state, so when the moved point shifts, the negative shifts with it, and in the shifted form the negative is the moved point itself. The update is a regression carried out separately at each $x_t$.
-- DMD builds its two points away from the moved point. The moved point is the sample $\hat x$, while the positive and the negative are built from $x_{t'}$, a renoised copy of that sample, and only their difference is applied to $\hat x$. Because $x_{t'}$ is a noised copy of the moved point, it moves with the sample. This is the reparameterized gradient of the reverse KL, in which the score difference is evaluated at a noised copy of the sample.
+- MeanFlow builds all three points from the same $x_t$, as one-step maps to level $r$ with the student's average velocity, the teacher's velocity and the student's induced velocity. Because the negative contains $\mathrm{sg}(u_\theta)$, it moves together with the moved point. The update is a regression at each $x_t$.
+- DMD builds its two points away from the moved point. The moved point is the sample $\hat x$, the positive and the negative are built at its renoised copy $x_{t'}$, and their difference is applied to $\hat x$. Since $x_{t'}$ is built from $\hat x$, it follows the sample. This is the reparameterized gradient of the reverse KL.
 
 <!-- V5: ConstructPosNeg. MeanFlow half: x_pred, x_pos, x_neg from one x_t; the negative is the flow map shifted by -(t-r)J (intrinsic). DMD half: x_pred -> renoise to x_t' -> teacher and fake predictions at x_t' -> difference carried back to x_pred (extrinsic) (to render) -->
 
@@ -233,7 +237,7 @@ We write $x_{\text{pred}}$ for the point being moved, which is $\hat x^\theta_r$
 
 Each method ties its negative to the moved point. In MeanFlow the tie is $\mathrm{sg}(u_\theta)$, evaluated at the same state as the moved point. In DMD it is the renoised state $x_{t'}$, which is built from the sample. Without such a tie nothing pulls the update back toward zero, and Section 6 shows that MeanFlow diverges when its negative no longer contains the current student.
 
-### Side by side
+### Comparison side by side
 
 | | Moved point | $x_{\text{pos}}$ | $x_{\text{neg}}$ | Built from | Extra cost |
 |---|---|---|---|---|---|
@@ -339,20 +343,16 @@ The animation below follows the attraction and the repulsion on three fixed poin
 
 **Level $r$.** Training DMD at every level roughly halves its coupling error (0.66 vs 1.26) at similar sample quality, because matching the intermediate marginals constrains the student's flow maps more than matching the clean end alone. The coupling error still stays an order of magnitude above MeanFlow's, which is expected for a distribution-level objective.
 
-
-
 ![Two-step samples over training.](materials/samples_k2.gif)
 
 <!-- V7: ToyResults (Manim version of the above) (to render) -->
 <!-- R1: quality vs NFE; R2: quality vs training cost; R3: coupling vs SW2 scatter; F4: flow-map error triangles (to render from the evaluation pipeline) -->
 
----
-
-This is a simple experiment, but it shows that the two methods are consistent with each other. Written as the same pull-push update, both turn the teacher into a working one- and two-step generator, and they differ in what they match, the distribution or the trajectories, exactly where their negatives differ. The design also has several independent choices, namely where the state comes from, which level $r$ is trained, how the negative is obtained, and where the points are built. Every combination we tried, including ones that no published method uses, gives an effective few-step generator. These are small CPU runs on 2D data, so image-scale behavior may differ.
+**What the toy shows.** This is a simple experiment, but it shows that the two methods are consistent with each other. Written as the same pull-push update, both turn the teacher into a working one- and two-step generator, and they differ in what they match, the distribution or the trajectories, exactly where their negatives differ. The design also has several independent choices, namely where the state comes from, which level $r$ is trained, how the negative is obtained, and where the points are built. Every combination we tried, including ones that no published method uses, gives an effective few-step generator. These are small CPU runs on 2D data, so image-scale behavior may differ.
 
 ---
 
-## 7. Extension: Drifting models
+## 7. An extension to drifting models
 
 Drifting models ([Deng et al., 2026](https://arxiv.org/abs/2602.04770)) train a one-step generator $\hat x = G_\theta(\epsilon)$ without any teacher. Each generated sample is moved by a *drift field* built from two sets of samples, the positives $y^+_j$, which are a batch of data, and the negatives $y^-_j$, which are a batch of generated samples. In practice the negatives are the current batch itself, with each sample excluded from its own set. With a kernel $k(x,y) = \exp(-\|x-y\|/\tau)$ at temperature $\tau$, normalized over $y$ by a softmax, the two points and the drift are
 
@@ -362,7 +362,7 @@ x_{\text{neg}} = \frac{\sum_j k(\hat x,y^-_j)\,y^-_j}{\sum_j k(\hat x,y^-_j)},\q
 V(\hat x) = x_{\text{pos}} - x_{\text{neg}},
 $$
 
-and the loss is $\|\hat x - \mathrm{sg}(\hat x + V(\hat x))\|^2$ (their Eqs. 6, 8 to 10 and 12). This is the pull-push gradient with $W = 1$. Each sample is pulled toward the kernel mean of the data around it and pushed away from the kernel mean of the generator's own samples around it. Their Algorithm 2 adds a second softmax over the batch of generated samples and uses the geometric mean of the two normalizations as the kernel weights. This gives $V = s^+ s^-(x_{\text{pos}} - x_{\text{neg}})$, where $s^+$ and $s^-$ are the total weights that a sample places on the positives and on the negatives, and $x_{\text{pos}}$ and $x_{\text{neg}}$ are the means under these weights. This corresponds to the per-sample weight $W = s^+ s^-$. The algorithm also sums $V$ over several temperatures and normalizes the feature scale and the drift magnitude.
+and the loss is $\|\hat x - \mathrm{sg}(\hat x + V(\hat x))\|^2$ (their Eqs. 6, 8 to 10 and 12). This is the pull-push gradient with $W = 1$. Each sample is pulled toward the kernel mean of the data around it and pushed away from the kernel mean of the generator's own samples around it. Their Algorithm 2 adds a second softmax over the batch of generated samples and uses the geometric mean of the two normalizations as the kernel weights. This gives $V = m^+ m^-(x_{\text{pos}} - x_{\text{neg}})$, where $m^+$ and $m^-$ are the total weights that a sample places on the positives and on the negatives, and $x_{\text{pos}}$ and $x_{\text{neg}}$ are the means under these weights. This corresponds to the per-sample weight $W = m^+ m^-$. The algorithm also sums $V$ over several temperatures and normalizes the feature scale and the drift magnitude.
 
 **The two points as posterior means.** In flow matching, DMD's positive and negative are estimates of the posterior mean of $x_0$ given $x_t$, under the data and under the student (Appendix B). We write them $\mathbb E_{\text{data}}[x_0\mid x_t]$ and $\mathbb E_\theta[x_0\mid x_t]$. When the clean distribution is the empirical distribution of a finite set of samples $\{y_j\}$, the posterior mean has a closed form. Since $x_t$ given $x_0$ is distributed as $\mathcal N\big((1-t)\,x_0,\ t^2 I\big)$,
 
@@ -401,7 +401,6 @@ The three variants behave consistently.
 - All three need enough samples. With $N \ge 256$, every variant matches the distribution as well as DMD with a trained fake or better, with best one-step KL 0.28 (native drift), 0.25 (FM-ideal drift) and 0.39 (semi-drift), against 0.45. With fewer samples (native and FM-ideal drift at $N$ = 4 to 16, semi-drift at $N$ = 8 to 16), training is stable but stalls at blurred moons, because $x_{\text{pos}}$ and $x_{\text{neg}}$ average only a handful of points and give a noisy, biased direction.
 - All three collapse at the smallest $N$. At $N = 2$, every variant breaks down in every seed and the samples scatter far from the data. The negative is then the one other generated sample, and in the drifting variants the positive is essentially one random data point, so the update carries information about single points rather than about the distributions. In the drifting variants, the drift normalization also keeps the average step at unit size however poor its direction is.
 
-
 ![Native drift on three fixed one-step samples x_pred (black), with positives (blue, N data samples), negatives (orange, N generated samples), their kernel means x_pos (green) and x_neg (red) at temperature 0.2, and the update x_pos - x_neg (black, drawn six times longer), for N = 256, 8 and 2. At N = 256 both means sit close to the sample and the update is a small local correction. At N = 8 each mean is pulled to one or two neighbours. At N = 2 the samples move far from the data and the view has to zoom out.](materials/drift_directions.gif)
 
 **High dimensions.** In 2D a few dozen samples cover the two moons, so kernel means are good estimates. In image space they are not, because the number of samples a kernel estimate needs grows exponentially with the dimension. The drifting paper reflects this. Its ImageNet models generate in a 4096-dimensional autoencoder latent space (32×32×4), yet each kernel estimate uses only 64 generated samples and 64 to 128 data samples from one class. The kernel means are not computed on the latents but in the feature space of a pre-trained self-supervised encoder, and the authors report that the method does not work on ImageNet without that encoder. Their ablation also shows the dependence on the number of samples. With one positive per class instead of 64, the Fréchet Inception Distance (FID, lower is better) rises from 8.46 to 20.43, and with 8 positives and 8 negatives per class instead of 64 each, it rises to 11.82. Semi-drift cannot use the same remedy, because its Gaussian kernel comes from the noising process in data space. At image scale, DMD's learned fake therefore remains the practical way to build the negative.
@@ -433,7 +432,7 @@ Start from $(t-r)\,u(x_t,t,r) = \int_r^t v(x_s,s)\,ds$ and differentiate in $t$ 
 
 Take $x_t=(1-t)x_0+t\epsilon$ for any clean distribution, and let $p_t$ be the distribution of $x_t$ and $v$ its marginal velocity. Since $x_t$ given $x_0$ is Gaussian, Tweedie's formula gives $\nabla\log p_t(x_t) = -\mathbb E[\epsilon\mid x_t]/t$. Taking conditional expectations of $x_t=(1-t)x_0+t\epsilon$ and of $\epsilon - x_0$ gives $x_t = (1-t)\,\mathbb E[x_0\mid x_t] + t\,\mathbb E[\epsilon\mid x_t]$ and $v = \mathbb E[\epsilon\mid x_t]-\mathbb E[x_0\mid x_t]$. Hence $\mathbb E[\epsilon\mid x_t] = x_t + (1-t)v$ and $\mathbb E[x_0\mid x_t] = x_t - t\,v = X[x_t,v,0]$.
 
-Applied to the student and to the data, with scores $s_\theta=\nabla\log p_{\theta,t}$ and $s_{\text{data}}=\nabla\log p_{\text{data},t}$ and velocities $v_\phi$ and $v_{\text{teacher}}$, this gives $s_\theta - s_{\text{data}} = w_t\,(v_{\text{teacher}} - v_\phi)$ with $w_t=(1-t)/t$. The order of the two fields flips when scores are written as velocities. The reverse-KL gradient for a renoised sample is $\mathbb E[(s_\theta - s_{\text{data}})(x_{t'})^\top \partial x_{t'}/\partial\theta]$. With $\partial x_{t'}/\partial\theta = (1-t')\,\partial\hat x/\partial\theta$, it becomes the DMD gradient of Section 3, with the factor $(1-t')$ absorbed into the weight.
+Applied to the student and to the data, whose velocities are $v_\phi$ and $v_{\text{teacher}}$, this gives $\nabla\log p_{\theta,t} - \nabla\log p_{\text{data},t} = w_t\,(v_{\text{teacher}} - v_\phi)$ with $w_t=(1-t)/t$. The order of the two fields flips when scores are written as velocities. The reverse-KL gradient for a renoised sample is $\mathbb E[(\nabla\log p_{\theta,t'} - \nabla\log p_{\text{data},t'})(x_{t'})^\top \partial x_{t'}/\partial\theta]$. With $\partial x_{t'}/\partial\theta = (1-t')\,\partial\hat x/\partial\theta$, it becomes the DMD gradient of Section 3, with the factor $(1-t')$ absorbed into the weight.
 </details>
 
 <details>
@@ -451,7 +450,7 @@ For two velocities $v_1$ and $v_2$, $X[x_t,v_1,r]-X[x_t,v_2,r] = -(t-r)(v_1-v_2)
 <details>
 <summary>E. DMD at level r</summary>
 
-Let $p_{\theta,r}$ be the distribution of the student's level-$r$ points $\hat x^\theta_r$, and $p_{\text{data},r}$ the data's level-$r$ marginal. For $r=0$ these are the distributions of Section 3. The kernel $x_{t'} = a\,x_r + b\,\epsilon'$ with $a=(1-t')/(1-r)$ and $b^2 = t'^2 - a^2r^2$ maps $p_{\text{data},r}$ to $p_{\text{data},t'}$, because $a(1-r) = 1-t'$ and $a^2r^2+b^2 = t'^2$. Tweedie's formula expresses a posterior mean under Gaussian noise through the score of the noised distribution. For this kernel it gives $\mathbb E[x_r\mid x_{t'}] = \big(x_{t'} + b^2\,s(x_{t'})\big)/a$, where $s$ is the score of the distribution of $x_{t'}$. For the data, $s = s_{\text{data}}$ follows from the teacher's velocity by Appendix B. The fake, conditioned on $r$, is fitted by denoising score matching on the student's pairs $(\hat x^\theta_r, x_{t'})$. With $p_{\theta,t'}$ the distribution of $x_{t'}$ built from the student's points, the gradient of $\mathrm{KL}(p_{\theta,t'}\,\|\,p_{\text{data},t'})$ with respect to the moved point is $a\,(s_\theta - s_{\text{data}})(x_{t'})$, which is proportional to $x_{\text{neg}} - x_{\text{pos}}$. Descending it pulls $\hat x^\theta_r$ toward the teacher's estimate and away from the fake's.
+Let $p_{\theta,r}$ be the distribution of the student's level-$r$ points $\hat x^\theta_r$, and $p_{\text{data},r}$ the data's level-$r$ marginal. For $r=0$ these are the distributions of Section 3. The kernel $x_{t'} = a\,x_r + b\,\epsilon'$ with $a=(1-t')/(1-r)$ and $b^2 = t'^2 - a^2r^2$ maps $p_{\text{data},r}$ to $p_{\text{data},t'}$, because $a(1-r) = 1-t'$ and $a^2r^2+b^2 = t'^2$. Tweedie's formula expresses a posterior mean under Gaussian noise through the score of the noised distribution. For this kernel it gives $\mathbb E[x_r\mid x_{t'}] = \big(x_{t'} + b^2\,\nabla\log p_{t'}(x_{t'})\big)/a$, where $p_{t'}$ is the distribution of $x_{t'}$. For the data, $\nabla\log p_{\text{data},t'}$ follows from the teacher's velocity by Appendix B. The fake, conditioned on $r$, is fitted by denoising score matching on the student's pairs $(\hat x^\theta_r, x_{t'})$. With $p_{\theta,t'}$ the distribution of $x_{t'}$ built from the student's points, the gradient of $\mathrm{KL}(p_{\theta,t'}\,\|\,p_{\text{data},t'})$ with respect to the moved point is $a\,(\nabla\log p_{\theta,t'} - \nabla\log p_{\text{data},t'})(x_{t'})$, which is proportional to $x_{\text{neg}} - x_{\text{pos}}$. Descending it pulls $\hat x^\theta_r$ toward the teacher's estimate and away from the fake's.
 </details>
 
 <details>
@@ -487,10 +486,11 @@ In all three variants, as in DMD, the two points are estimates of the posterior 
 
 ## Code
 
-All experiments of this post can be rerun from [`demo/`](demo/). The notebook [`demo/contrastive_generation.ipynb`](demo/contrastive_generation.ipynb) trains every model, prints every table and writes every figure and animation to [`materials/`](materials/). The functions it calls are in [`demo/assess.py`](demo/assess.py). Everything runs on CPU, and the whole notebook takes about 40 minutes with 12 training processes running side by side (`pip install -r demo/requirements.txt`, then run the notebook from top to bottom).
+All experiments of this post can be rerun from [`demo/`](demo/). The notebook [`demo/contrastive_generation.ipynb`](demo/contrastive_generation.ipynb) trains every model, prints every table and writes every figure and animation to [`materials/`](materials/). The functions it calls are in [`demo/assess.py`](demo/assess.py). Everything runs on CPU, and the parts behind the post take about 40 minutes with 12 training processes running side by side (`pip install -r demo/requirements.txt`, then run the notebook from top to bottom).
 
 | Post | Notebook | Where to look in `assess.py` |
 |---|---|---|
+| Section 1, the teacher with K Euler steps and the flow map | part 1 | `train_teacher`, `teacher_steps`, `anim_teacher_steps`, `anim_flow_map` |
 | Section 2, learning the flow map by simulation | part 2 | `sim_pos_neg`; `train_student` with `--variant sim-on-all` |
 | Section 4, MeanFlow and DMD as pull and push | parts 0 and 3 | `pull_push` (the pull-push loss), `mf_pos_neg`, `mf_J`, `dmd_pos_neg`, `renoise`, `level_pred` |
 | Section 6, toy experiments and ablations | part 4 | `train_student` with `--variant {mf,dmd}-{on,off}-{r0,all}` and `--mf-neg`; `export_distribution`, `table_distribution` |
