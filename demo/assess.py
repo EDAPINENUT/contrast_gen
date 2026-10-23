@@ -2689,38 +2689,37 @@ def f_pull_push_anchors(step=200, k=3):
     print(f"[figures] {MATERIALS / 'pull_push_anchors.png'}")
 
 
-def f_teaser(run="dmd-on-all", step=200, k=3):
-    """Thumbnail of the post, without text: the student's one-step samples at an early step and, on a few of them,
-    the pull toward x_pos (green), the push away from x_neg (red) and the update x_pos - x_neg (black)."""
+def f_teaser(run="dmd-on-all", step=200, k=3, arrow_len=0.22, crop=0.82):
+    """Square thumbnail of the post, without text: the student's one-step samples at an early step and, on a few of
+    them, the directions of the pull toward x_pos (green), the push away from x_neg (red) and the update
+    x_pos - x_neg (black), each drawn `arrow_len` of the half-width long; the square spans `crop` of the samples'
+    width."""
     d = np.load(ART / "assets" / "distribution_demo.npz")
     p = int(np.searchsorted(d[f"{run}__snap_steps"], step))
     xp, pos, neg = (d[f"{run}__c__{f}"][p] for f in ("x_pred", "x_pos", "x_neg"))
     upd = pos - neg
     size = np.linalg.norm(upd, axis=1)
-    chosen = farthest_points(xp, k, size >= np.quantile(size, 0.3))
-    scale = max(1.0, round(0.5 / np.median(size[chosen])))
     data, cloud = d["data"], d[f"{run}__k1"][p]
-    shown = np.concatenate([xp[chosen], pos[chosen], neg[chosen], (2 * xp - neg)[chosen],
-                            (xp + scale * upd)[chosen]])
-    lo = np.minimum(np.quantile(data, 0.005, axis=0), shown.min(0)) - 0.12
-    hi = np.maximum(np.quantile(data, 0.995, axis=0), shown.max(0)) + 0.12
-    width = 5.0
-    fig = plt.figure(figsize=(width, width * (hi[1] - lo[1]) / (hi[0] - lo[0])))
+    lo, hi = np.quantile(data, 0.005, axis=0), np.quantile(data, 0.995, axis=0)
+    c, half = (lo + hi) / 2, crop * (hi[0] - lo[0]) / 2
+    inside = (np.abs(xp - c) < 0.62 * half).all(1)
+    chosen = farthest_points(xp, k, (size >= np.quantile(size, 0.3)) & inside)
+    unit = lambda v: arrow_len * half * v / np.linalg.norm(v, axis=1, keepdims=True).clip(1e-9)
+    pull, push, upd_draw = unit(pos - xp), unit(xp - neg), unit(upd)
+    fig = plt.figure(figsize=(4.0, 4.0))
     ax = fig.add_axes([0.0, 0.0, 1.0, 1.0])
-    ax.scatter(*data.T, s=3.0, c="#4C72B0", alpha=0.3, lw=0, zorder=0)
-    ax.scatter(*cloud[:1500].T, s=3.0, c=FC["student"], alpha=0.35, lw=0, zorder=1)
+    ax.scatter(*data.T, s=5.0, c="#4C72B0", alpha=0.3, lw=0, zorder=0)
+    ax.scatter(*cloud[:1500].T, s=5.0, c=FC["student"], alpha=0.35, lw=0, zorder=1)
     for i in chosen:
-        arrow(ax, xp[i], pos[i], FC["teacher"], lw=2.4)
-        arrow(ax, xp[i], 2 * xp[i] - neg[i], FC["neg"], lw=2.4)
-        arrow(ax, xp[i], xp[i] + scale * upd[i], "k", lw=3.0, z=6)
-        dot(ax, pos[i], FC["teacher"], s=60)
-        dot(ax, neg[i], FC["neg"], s=60)
-        dot(ax, xp[i], "k", s=75, z=7)
-    ax.set_xlim(lo[0], hi[0])
-    ax.set_ylim(lo[1], hi[1])
+        arrow(ax, xp[i], xp[i] + pull[i], FC["teacher"], lw=3.0)
+        arrow(ax, xp[i], xp[i] + push[i], FC["neg"], lw=3.0)
+        arrow(ax, xp[i], xp[i] + upd_draw[i], "k", lw=3.4, z=6)
+        dot(ax, xp[i], "k", s=110, z=7)
+    ax.set_xlim(c[0] - half, c[0] + half)
+    ax.set_ylim(c[1] - half, c[1] + half)
     ax.axis("off")
     for ext in ("png", "svg"):
-        fig.savefig(MATERIALS / f"teaser.{ext}", dpi=200, facecolor="white")
+        fig.savefig(MATERIALS / f"teaser.{ext}", dpi=150, facecolor="white")
     plt.close(fig)
     print(f"[figures] {MATERIALS / 'teaser.png'}")
 
