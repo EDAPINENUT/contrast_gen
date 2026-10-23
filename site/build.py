@@ -8,7 +8,7 @@ from pathlib import Path
 import pypandoc
 
 ROOT = Path(__file__).resolve().parents[1]
-REPO = "https://github.com/EDAPINENUT/contrast_gen.edapinenut.github.io"
+REPO = "https://github.com/EDAPINENUT/contrast_gen"
 DATE = "October 2026"
 DESCRIPTION = ("MeanFlow, Distribution Matching Distillation and drifting models as one pull-push update: "
                "a few-step generator moves its samples toward a positive and away from a negative.")

@@ -1,6 +1,6 @@
 # Contrastive Generation
 
-Blog post: **[Contrastive Generation: Training a Few-Step Generator by Pulling and Pushing Its Samples](https://edapinenut.github.io/contrast_gen.edapinenut.github.io/)**
+Blog post: **[Contrastive Generation: Training a Few-Step Generator by Pulling and Pushing Its Samples](https://edapinenut.github.io/contrast_gen/)**
 
 - `contrastive_generation.md`: the post.
 - `materials/`: its figures and animations (GIF, plus MP4 and SVG versions).
