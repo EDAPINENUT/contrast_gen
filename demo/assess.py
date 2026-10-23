@@ -2702,7 +2702,7 @@ def f_teaser(run="dmd-on-all", step=200, k=3):
     chosen = farthest_points(xp, k, size >= np.quantile(size, 0.3))
     scale = max(1.0, round(0.5 / np.median(size[chosen])))
     fig = plt.figure(figsize=(8.0, 3.6))
-    ax = fig.add_axes([0.43, 0.02, 0.56, 0.96])
+    ax = fig.add_axes([0.355, 0.0, 0.625, 1.0])
     data, cloud = d["data"], d[f"{run}__k1"][p]
     ax.scatter(*data.T, s=2.0, c="#4C72B0", alpha=0.25, lw=0, zorder=0)
     ax.scatter(*cloud[:1500].T, s=2.0, c=FC["student"], alpha=0.3, lw=0, zorder=1)
@@ -2715,8 +2715,8 @@ def f_teaser(run="dmd-on-all", step=200, k=3):
         dot(ax, xp[i], "k", s=55, z=7)
     shown = np.concatenate([xp[chosen], pos[chosen], neg[chosen], (2 * xp - neg)[chosen],
                             (xp + scale * upd)[chosen]])
-    lo = np.minimum(np.quantile(data, 0.005, axis=0), shown.min(0)) - 0.1
-    hi = np.maximum(np.quantile(data, 0.995, axis=0), shown.max(0)) + 0.1
+    lo = np.minimum(np.quantile(data, 0.005, axis=0), shown.min(0)) - 0.05
+    hi = np.maximum(np.quantile(data, 0.995, axis=0), shown.max(0)) + 0.05
     ax.set_xlim(lo[0], hi[0])
     ax.set_ylim(lo[1], hi[1])
     ax.set_aspect("equal", adjustable="datalim")
@@ -2724,8 +2724,8 @@ def f_teaser(run="dmd-on-all", step=200, k=3):
     fig.text(0.035, 0.89, "Contrastive Generation", fontsize=17, color="#002336", va="center")
     fig.text(0.035, 0.775, "one update behind MeanFlow, DMD\nand drifting models", fontsize=9.5, color="0.35",
              va="center", linespacing=1.3)
-    fig.add_artist(plt.Line2D([0.035, 0.405], [0.69, 0.69], color="#9b3022", lw=1.1))
-    fig.text(0.22, 0.57, "$\\nabla_\\theta\\mathcal{L} = -2W\\,\\left(\\partial x_{\\mathrm{pred}}/\\partial\\theta\\right)^{\\top}"
+    fig.add_artist(plt.Line2D([0.035, 0.365], [0.69, 0.69], color="#9b3022", lw=1.1))
+    fig.text(0.2, 0.57, "$\\nabla_\\theta\\mathcal{L} = -2W\\,\\left(\\partial x_{\\mathrm{pred}}/\\partial\\theta\\right)^{\\top}"
              "\\left(x_{\\mathrm{pos}} - x_{\\mathrm{neg}}\\right)$", fontsize=10.5, ha="center", va="center",
              bbox=dict(boxstyle="round,pad=0.4", fc="white", ec="#9b3022", lw=1.0))
     key = [(0.42, "k", "o", "$x_{\\mathrm{pred}}$: the moved sample"),
