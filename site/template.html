@@ -6,10 +6,10 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
-  <title>{{title}} | Haitao Lin</title>
+  <title>{{headline}}: {{subtitle}} | Haitao Lin</title>
   <meta name="description" lang="en" content="{{description}}">
   <meta name="author" content="Haitao Lin">
-  <meta property="og:title" content="{{title}}">
+  <meta property="og:title" content="{{headline}}: {{subtitle}}">
   <meta property="og:description" content="{{description}}">
   <meta property="og:type" content="article">
   <meta property="og:image" content="{{site}}/materials/teaser.png">
@@ -52,14 +52,10 @@
 
 <div id="profile-cover" class="cover shallow-bg img-responsive">
   <div id="post-card" class="profile-wrapper wrapper-light">
-    <div id="my-pic" class="profile-col post-col-1">
-      <a href="https://edapinenut.github.io/">
-        <img id="profile-avatar" src="https://edapinenut.github.io/images/self-portrait/me.jpeg" alt="Haitao Lin" class="circle-img border-dark"/>
-      </a>
-    </div>
-    <div id="my-contact" class="profile-col post-col-2">
-      <div id="post-title" class="text-grey-dark">{{title}}</div>
-      <div id="post-meta" class="text-grey">Haitao Lin &middot; {{date}}</div>
+    <div id="post-heading">
+      <div id="post-title">{{headline}}</div>
+      <div id="post-subtitle">{{subtitle}}</div>
+      <div id="post-meta">Haitao Lin, {{date}}</div>
       <div class="social-media">
         <a href="https://edapinenut.github.io/" class="icon-button github" title="Homepage">
           <i class="fa fa-home icon-github"></i><span></span>

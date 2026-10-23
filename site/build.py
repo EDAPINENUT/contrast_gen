@@ -14,7 +14,8 @@ import pypandoc
 ROOT = Path(__file__).resolve().parents[1]
 REPO = "https://github.com/EDAPINENUT/contrast_gen"
 SITE = "https://edapinenut.github.io/contrast_gen"
-DATE = "October 2026"
+DATE = "Oct. 2026"
+HEADLINE = "Contrastive Generation I"
 DESCRIPTION = ("MeanFlow, Distribution Matching Distillation and drifting models as one pull-push update: "
                "a few-step generator moves its samples toward a positive and away from a negative.")
 ICONS = [("velocit", "fa-location-arrow"), ("simulation", "fa-road"), ("as pull", "fa-exchange"),
@@ -53,6 +54,7 @@ def main():
     src = re.sub(r"<!--.*?-->\n?", "", src, flags=re.S)
     title_line, body = src.split("\n", 1)
     title = title_line.lstrip("#").strip()
+    subtitle = title.split(": ", 1)[-1]
     # GitHub Pages serves no directory listings and no rendered notebooks, so code links go to the repository.
     body = re.sub(r"\]\(((?:demo|materials)/[^)]*)\)",
                   lambda m: f"]({m.group(1) if m.group(1).endswith(('.gif', '.png')) else github_link(m.group(1))})",
@@ -71,7 +73,7 @@ def main():
     page_body = (section("overview", "Overview", intro, "fa-id-card")
                  + section("contents", "Contents", contents, "fa-list-ul") + "".join(parts))
     page = (ROOT / "site" / "template.html").read_text()
-    for key, val in dict(title=title, description=DESCRIPTION, date=DATE, repo=REPO, site=SITE,
+    for key, val in dict(headline=HEADLINE, subtitle=subtitle, description=DESCRIPTION, date=DATE, repo=REPO, site=SITE,
                          highlighting_css=highlighting_css(), body=page_body).items():
         page = page.replace("{{" + key + "}}", val)
     (ROOT / "index.html").write_text(page)
