@@ -31,6 +31,10 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.collections import LineCollection
+from matplotlib.legend import Legend
+from matplotlib.legend_handler import HandlerBase
+from matplotlib.lines import Line2D
 from PIL import Image
 import av
 import numpy as np
@@ -2110,7 +2114,7 @@ def _anim_flow_map(fps, hold, n_ode, n_jump, n_tan, n_zero, pause):
         gradient_curve(ax, teacher_curve, 1.0, alpha=0.3)
         dot(ax, x_t, "k")
         ax.text(x_t[0] + 0.01, x_t[1] - 0.09, "$x_t$", fontsize=13, va="top")
-        ax.plot([], [], c="#8E8AB8", lw=4, label="teacher ODE trajectory")
+        ax.add_line(GradientLegendLine("teacher ODE trajectory"))
         ax.legend(loc="upper left", bbox_to_anchor=(0.0, 1.0), frameon=False, fontsize=9.5)
         title_text.set_text(title)
 
@@ -2502,6 +2506,29 @@ def level_axis(ax):
     ax.axis("off")
 
 
+class GradientLegendLine(Line2D):
+    """Legend-only line, drawn in the legend as the c0 -> c1 gradient of gradient_curve."""
+
+    def __init__(self, label, c0="#E8A04F", c1="#4C72B0", lw=4, alpha=None):
+        super().__init__([], [], lw=lw, alpha=alpha, label=label)
+        self.c0, self.c1 = c0, c1
+
+
+class _GradientLegendHandler(HandlerBase):
+    def create_artists(self, legend, orig, xdescent, ydescent, width, height, fontsize, trans):
+        n = 24
+        x = np.linspace(-xdescent, width - xdescent, n + 1)
+        y = np.full(n + 1, height / 2 - ydescent)
+        segs = np.stack([np.stack([x[:-1], y[:-1]], 1), np.stack([x[1:], y[1:]], 1)], 1)
+        a = np.linspace(0, 1, n)[:, None]
+        colors = (1 - a) * np.array(matplotlib.colors.to_rgb(orig.c0)) + a * np.array(matplotlib.colors.to_rgb(orig.c1))
+        return [LineCollection(segs, colors=colors, linewidths=orig.get_linewidth(), alpha=orig.get_alpha(),
+                               capstyle="butt", transform=trans)]
+
+
+Legend.update_default_handler_map({GradientLegendLine: _GradientLegendHandler()})
+
+
 def gradient_curve(ax, f, s_end, c0="#E8A04F", c1="#4C72B0", lw=4, alpha=1.0, s_stop=None):
     """Curve from 0 to s_end coloured from c0 to c1; with s_stop, only the part up to s_stop is drawn, in the
     colours it has in the full curve."""
@@ -2549,7 +2576,7 @@ def f2_tangent_vs_chord():
             va="bottom", fontsize=11, color="0.25")
     ax.text(T_chord[0] + 0.03, T_chord[1] - 0.13, "flow map $x_r$\n$X[x_t, u, r]$", ha="left", fontsize=11)
     ax.text(x_t[0] + 0.01, x_t[1] - 0.09, "$x_t$", fontsize=13, va="top")
-    ax.plot([], [], c="#8E8AB8", lw=4, label="teacher ODE trajectory")
+    ax.add_line(GradientLegendLine("teacher ODE trajectory"))
     ax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.02), frameon=False, fontsize=9.5)
     ax.set_title("(a) one teacher call gives a tangent point, not the flow map", fontsize=12, pad=48)
 
@@ -2580,8 +2607,8 @@ def f2_tangent_vs_chord():
     ax.text(S_chord[0] + 0.02, S_chord[1] - 0.12, "$\\hat x^\\theta_r = X[x_t, u_\\theta, r]$\nstudent's prediction (moved)",
             color=FC["student"], fontsize=10.5, va="center")
     ax.scatter([], [], facecolors="none", edgecolors="0.45", s=40, label="teacher's flow map $x_r$")
-    ax.plot([], [], c="#8E8AB8", lw=4, alpha=0.5, label="teacher ODE trajectory")
-    ax.plot([], [], c=FC["student"], lw=3, alpha=0.6, label="student's own trajectory")
+    ax.add_line(GradientLegendLine("teacher ODE trajectory", alpha=0.5))
+    ax.add_line(GradientLegendLine("student's own trajectory", c0="#F6C08A", c1=FC["student"], lw=3, alpha=0.6))
     ax.legend(loc="lower center", bbox_to_anchor=(0.5, -0.02), ncol=3, frameon=False, fontsize=9.5,
               columnspacing=1.2, handlelength=1.6)
     ax.text(x_t[0] + 0.01, x_t[1] - 0.09, "$x_t$", fontsize=13, va="top")

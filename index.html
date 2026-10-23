@@ -141,8 +141,8 @@ and push</a></li>
 space</a></li>
 <li><a href="#toy-experiments" id="toc-toy-experiments">6. Toy
 experiments</a></li>
-<li><a href="#extension-drifting-models"
-id="toc-extension-drifting-models">7. Extension: Drifting
+<li><a href="#an-extension-to-drifting-models"
+id="toc-an-extension-to-drifting-models">7. An extension to drifting
 models</a></li>
 <li><a href="#conclusion" id="toc-conclusion">8. Conclusion</a></li>
 <li><a href="#appendix" id="toc-appendix">Appendix</a></li>
@@ -152,12 +152,12 @@ models</a></li>
 
   <div class="post-body">
 <p>A few-step generator turns noise into a sample with one or a few
-network calls. This post shows that two common ways of training such a
-generator, with MeanFlow, Distribution Matching Distillation (DMD) and
-the recently proposed Drifting Models, use the same update. Each update
+network calls. This post shows that three ways of training such a
+generator, MeanFlow, Distribution Matching Distillation (DMD) and the
+recently proposed drifting models, use the same update. Each update
 moves a point produced by the generator toward a <em>positive</em>
 point, which carries information about the data, and away from a
-<em>negative</em> point, which describes the generator itself. These
+<em>negative</em> point, which describes the generator itself. The
 methods differ in how they obtain the negative and in which state they
 build the two points from.</p>
 <p>All pictures and numbers in this post come from one 2D toy problem,
@@ -201,20 +201,50 @@ empty region between them.</p>
 <p><strong>ODE trajectories.</strong> Integrating <span
 class="math inline">\(dx/dt = v(x,t)\)</span> from <span
 class="math inline">\(t=1\)</span> to <span
-class="math inline">\(t=0\)</span> carries noise onto the moons. Unlike
-the conditional segments, these trajectories never cross, and they are
+class="math inline">\(t=0\)</span> carries noise to data. Unlike the
+conditional segments, these trajectories never cross, and they are
 curved. Following them accurately takes many small steps, that is, many
-network calls, or function evaluations (NFE). Given a state <span
-class="math inline">\(x_t\)</span>, we write <span
-class="math inline">\(x_s\)</span> for the point at level <span
-class="math inline">\(s\)</span> on the ODE trajectory through <span
-class="math inline">\(x_t\)</span>. The ODE carries <span
+network calls. Given a state <span class="math inline">\(x_t\)</span>,
+we write <span class="math inline">\(x_s\)</span> for the point at level
+<span class="math inline">\(s\)</span> on the ODE trajectory through
+<span class="math inline">\(x_t\)</span>. The ODE carries <span
 class="math inline">\(p_{\text{data},t}\)</span> to <span
 class="math inline">\(p_{\text{data},s}\)</span>, so <span
 class="math inline">\(x_s\)</span> has the same distribution as the
 interpolation at level <span class="math inline">\(s\)</span>, but it is
 a deterministic function of <span class="math inline">\(x_t\)</span>
 rather than a new interpolation sample.</p>
+<p>In practice <span class="math inline">\(v\)</span> has no closed
+form. It is replaced by a network <span
+class="math inline">\(v_{\text{teacher}}\)</span> trained by flow
+matching, which we call the <em>teacher</em>. The animation below
+integrates the teacher’s ODE with <span class="math inline">\(K\)</span>
+uniform Euler steps, for every <span class="math inline">\(K\)</span>
+from 1 to 64, and compares the samples with a fine solve of the same ODE
+from the same noises (fourth-order Runge-Kutta, RK4, with 100 steps). It
+measures the samples against held-out data in two ways, with SW2, the
+sliced 2-Wasserstein distance, and with KL, the divergence <span
+class="math inline">\(\mathrm{KL}(\text{samples}\,\|\,\text{data})\)</span>
+estimated from nearest neighbours (Section 6). With one step, every
+sample moves to the posterior mean <span class="math inline">\(\mathbb
+E[x_0\mid x_1]\)</span>, which is close to the mean of the data, so the
+samples collapse to the centre (KL 10.2). The error falls steadily as
+<span class="math inline">\(K\)</span> grows. SW2 reaches the level of
+the fine solve at about 16 steps, while the KL needs more, 0.06 at 32
+steps and 0.03 at 64, against 0.03 for the fine solve. A diffusion or
+flow model therefore needs tens of network calls before its samples are
+reliable, and this is the cost a few-step generator is meant to
+remove.</p>
+<figure>
+<img src="materials/teacher_steps.gif"
+alt="The teacher’s ODE from noise to data with K uniform Euler steps, for K = 1 to 64. Left, the K-step samples (green) against held-out data (blue). Second panel, a fine ODE solve from the same noises. Right, SW2 and KL(samples || data) against K, with the fine solve (dashed) and the value between two sets of data samples (dotted)." />
+<figcaption aria-hidden="true">The teacher’s ODE from noise to data with
+K uniform Euler steps, for K = 1 to 64. Left, the K-step samples (green)
+against held-out data (blue). Second panel, a fine ODE solve from the
+same noises. Right, SW2 and KL(samples || data) against K, with the fine
+solve (dashed) and the value between two sets of data samples
+(dotted).</figcaption>
+</figure>
 <p><strong>Average velocity and flow map.</strong> A few-step generator
 does not follow the curved trajectory. It jumps from <span
 class="math inline">\(x_t\)</span> directly to a point at a lower level
@@ -234,21 +264,26 @@ x_r = x_t - (t-r)\,u(x_t,t,r).
 \]</span></p>
 <p>Once <span class="math inline">\(u\)</span> is known, an exact jump
 is a single subtraction. The same subtraction can be carried out with
-any velocity <span class="math inline">\(v\)</span>, and we write it
-as</p>
+any velocity <span class="math inline">\(\omega\)</span>, and we write
+it as</p>
 <p><span class="math display">\[
-X[x_t, v, r] \;=\; x_t - (t-r)\,v .
+X[x_t, \omega, r] \;=\; x_t - (t-r)\,\omega .
 \]</span></p>
 <p>The start level of <span class="math inline">\(X\)</span> is the
 level of its first argument, so <span
-class="math inline">\(X[x_{t&#39;},v,0]\)</span> starts at level <span
-class="math inline">\(t&#39;\)</span>. We reserve the name flow map for
-<span class="math inline">\(X[x_t,u,r]=x_r\)</span>, the case with the
-exact average velocity, and call <span
-class="math inline">\(X[x_t,v,r]\)</span> with any other velocity a
-<em>one-step map</em>. With the instantaneous velocity <span
-class="math inline">\(v(x_t,t)\)</span>, the one-step map is one Euler
-step. Its endpoint lies on the tangent line of the trajectory at <span
+class="math inline">\(X[x_{t&#39;},\omega,0]\)</span> starts at level
+<span class="math inline">\(t&#39;\)</span>. When the second argument is
+a velocity field, it is evaluated at the start, so <span
+class="math inline">\(X[x_t,v,r]\)</span> stands for <span
+class="math inline">\(X[x_t,v(x_t,t),r]\)</span> and <span
+class="math inline">\(X[x_t,u,r]\)</span> for <span
+class="math inline">\(X[x_t,u(x_t,t,r),r]\)</span>. We reserve the name
+flow map for <span class="math inline">\(X[x_t,u,r]=x_r\)</span>, the
+case with the exact average velocity, and call <span
+class="math inline">\(X[x_t,\omega,r]\)</span> with any other velocity a
+<em>one-step map</em>. With the instantaneous velocity, <span
+class="math inline">\(X[x_t,v,r]\)</span> is one Euler step. Its
+endpoint lies on the tangent line of the trajectory at <span
 class="math inline">\(x_t\)</span>, and we call it the <strong>tangent
 point</strong>. The tangent point misses <span
 class="math inline">\(x_r\)</span> whenever the trajectory curves
@@ -258,11 +293,42 @@ class="math inline">\(K\)</span>-step sampler chooses levels <span
 class="math inline">\(1=t_0&gt;t_1&gt;\dots&gt;t_K=0\)</span> and,
 starting from <span class="math inline">\(\epsilon\)</span>, applies
 <span class="math inline">\(K\)</span> one-step maps in sequence.</p>
-<p>In practice <span class="math inline">\(v\)</span> is replaced by a
-teacher network <span class="math inline">\(v_{\text{teacher}}\)</span>
-trained by flow matching. From Section 2 on, the ODE, its trajectories,
-the average velocity <span class="math inline">\(u\)</span> and the flow
-map all refer to the teacher’s field.</p>
+<p>The animation below shows these objects on a schematic trajectory,
+drawn with the noise level on the horizontal axis. ODE sampling moves
+the point along the trajectory in many small steps, each in the
+direction of the tangent <span class="math inline">\(v(x_s,s)\)</span>.
+The average velocity instead covers the same distance in one jump along
+the secant from <span class="math inline">\(x_t\)</span> to <span
+class="math inline">\(x_r\)</span>, and its endpoint <span
+class="math inline">\(X[x_t,u,r]=x_r\)</span> is the flow map. One Euler
+step along the tangent at <span class="math inline">\(x_t\)</span> ends
+at the tangent point <span class="math inline">\(X[x_t,v,r]\)</span>,
+away from the trajectory. The last part of the animation continues all
+three to level 0. Following the trajectory and jumping once along the
+secant both end at the trajectory’s endpoint <span
+class="math inline">\(x_0 = X[x_t,u,0]\)</span>, so states spread around
+<span class="math inline">\(x_t\)</span> produce outputs peaked at <span
+class="math inline">\(x_0\)</span>. One Euler step with <span
+class="math inline">\(v\)</span> produces outputs peaked far from it,
+and the two distributions do not overlap.</p>
+<figure>
+<img src="materials/flow_map.gif"
+alt="A schematic ODE trajectory from level t to level r, with the noise level on the horizontal axis. First, ODE sampling follows the trajectory in small steps, with the tangent (the instantaneous velocity) drawn at the current point. Then the average velocity makes one jump along the secant from x_t to x_r, which is the flow map X[x_t, u, r]. Then one Euler step along the tangent at x_t lands at the tangent point X[x_t, v, r], off the trajectory. Last, all three are continued to level 0. The trajectory and the secant both end at x_0 = X[x_t, u, 0], and the outputs they produce peak there (blue), while the outputs of one Euler step with v peak far away (grey), so the two distributions do not match." />
+<figcaption aria-hidden="true">A schematic ODE trajectory from level t
+to level r, with the noise level on the horizontal axis. First, ODE
+sampling follows the trajectory in small steps, with the tangent (the
+instantaneous velocity) drawn at the current point. Then the average
+velocity makes one jump along the secant from x_t to x_r, which is the
+flow map X[x_t, u, r]. Then one Euler step along the tangent at x_t
+lands at the tangent point X[x_t, v, r], off the trajectory. Last, all
+three are continued to level 0. The trajectory and the secant both end
+at x_0 = X[x_t, u, 0], and the outputs they produce peak there (blue),
+while the outputs of one Euler step with v peak far away (grey), so the
+two distributions do not match.</figcaption>
+</figure>
+<p>From Section 2 on, the ODE, its trajectories, the average velocity
+<span class="math inline">\(u\)</span> and the flow map all refer to the
+teacher’s field.</p>
 <hr />
 <h2 id="learning-the-flow-map-by-simulation">2. Learning the flow map by
 simulation</h2>
@@ -518,10 +584,11 @@ x_{\text{neg}} = X[x_t, v_{\text{student}}, r].
 <p>The difference of the two points, <span
 class="math inline">\(x_{\text{pos}} - x_{\text{neg}} =
 -(t-r)\,(v_{\text{teacher}} - v_{\text{student}})\)</span>, no longer
-contains the curvature gap. It compares only the two instantaneous
-velocities and vanishes once they agree, however curved the trajectory
-is. This difference is what moves the student’s prediction <span
-class="math inline">\(\hat x^\theta_r\)</span>.</p>
+depends on how far the tangent point is from <span
+class="math inline">\(x_r\)</span>. It compares only the two
+instantaneous velocities and vanishes once they agree, however curved
+the trajectory is. This difference is what moves the student’s
+prediction <span class="math inline">\(\hat x^\theta_r\)</span>.</p>
 <figure>
 <img src="materials/f2_tangent_vs_chord.png"
 alt="Flow maps from one intermediate state x_t. (a) One teacher call gives the tangent point X[x_t, v_teacher, r], which misses the flow map x_r on the curved trajectory. (b) The positive is the teacher’s tangent point and the negative is the student’s tangent point, and their difference x_pos - x_neg moves the student’s prediction X[x_t, u_theta, r]." />
@@ -540,8 +607,8 @@ position. In panel (a), the curve is the teacher’s ODE trajectory from
 <span class="math inline">\(x_t\)</span>. The solid arrow is the flow
 map, which ends on the trajectory at <span
 class="math inline">\(x_r\)</span>. The dashed arrow ends at the tangent
-point that one teacher call gives, and the red bracket marks the gap
-between the two. In panel (b), the green dashed arrow ends at the
+point that one teacher call gives, and the red double arrow marks the
+gap between the two. In panel (b), the green dashed arrow ends at the
 positive, the teacher’s tangent point, and the red dashed arrow ends at
 the negative, the student’s tangent point taken from the student’s own
 trajectory in orange. The orange solid arrow is the student’s prediction
@@ -622,28 +689,22 @@ only through the student’s samples.</p>
 <h3 id="where-the-points-are-built">Where the points are built</h3>
 <p>The two methods also build their points from different states.</p>
 <ul>
-<li>MeanFlow builds all three points from one state. The moved point
-<span class="math inline">\(\hat x^\theta_r\)</span>, the positive and
-the negative are one-step maps from the same <span
-class="math inline">\(x_t\)</span> to the same level <span
-class="math inline">\(r\)</span>, with three different velocities,
-namely the student’s average velocity, the teacher’s instantaneous
-velocity and the student’s induced instantaneous velocity. The negative
-contains <span class="math inline">\(\mathrm{sg}(u_\theta)\)</span> at
-that same state, so when the moved point shifts, the negative shifts
-with it, and in the shifted form the negative is the moved point itself.
-The update is a regression carried out separately at each <span
+<li>MeanFlow builds all three points from the same <span
+class="math inline">\(x_t\)</span>, as one-step maps to level <span
+class="math inline">\(r\)</span> with the student’s average velocity,
+the teacher’s velocity and the student’s induced velocity. Because the
+negative contains <span
+class="math inline">\(\mathrm{sg}(u_\theta)\)</span>, it moves together
+with the moved point. The update is a regression at each <span
 class="math inline">\(x_t\)</span>.</li>
 <li>DMD builds its two points away from the moved point. The moved point
-is the sample <span class="math inline">\(\hat x\)</span>, while the
-positive and the negative are built from <span
-class="math inline">\(x_{t&#39;}\)</span>, a renoised copy of that
-sample, and only their difference is applied to <span
-class="math inline">\(\hat x\)</span>. Because <span
-class="math inline">\(x_{t&#39;}\)</span> is a noised copy of the moved
-point, it moves with the sample. This is the reparameterized gradient of
-the reverse KL, in which the score difference is evaluated at a noised
-copy of the sample.</li>
+is the sample <span class="math inline">\(\hat x\)</span>, the positive
+and the negative are built at its renoised copy <span
+class="math inline">\(x_{t&#39;}\)</span>, and their difference is
+applied to <span class="math inline">\(\hat x\)</span>. Since <span
+class="math inline">\(x_{t&#39;}\)</span> is built from <span
+class="math inline">\(\hat x\)</span>, it follows the sample. This is
+the reparameterized gradient of the reverse KL.</li>
 </ul>
 <p>We write <span class="math inline">\(x_{\text{pred}}\)</span> for the
 point being moved, which is <span class="math inline">\(\hat
@@ -679,7 +740,7 @@ at the same state as the moved point. In DMD it is the renoised state
 sample. Without such a tie nothing pulls the update back toward zero,
 and Section 6 shows that MeanFlow diverges when its negative no longer
 contains the current student.</p>
-<h3 id="side-by-side">Side by side</h3>
+<h3 id="comparison-side-by-side">Comparison side by side</h3>
 <table style="width:100%;">
 <colgroup>
 <col style="width: 16%" />
@@ -1014,20 +1075,20 @@ alt="Two-step samples over training." />
 <figcaption aria-hidden="true">Two-step samples over
 training.</figcaption>
 </figure>
+<p><strong>What the toy shows.</strong> This is a simple experiment, but
+it shows that the two methods are consistent with each other. Written as
+the same pull-push update, both turn the teacher into a working one- and
+two-step generator, and they differ in what they match, the distribution
+or the trajectories, exactly where their negatives differ. The design
+also has several independent choices, namely where the state comes from,
+which level <span class="math inline">\(r\)</span> is trained, how the
+negative is obtained, and where the points are built. Every combination
+we tried, including ones that no published method uses, gives an
+effective few-step generator. These are small CPU runs on 2D data, so
+image-scale behavior may differ.</p>
 <hr />
-<p>This is a simple experiment, but it shows that the two methods are
-consistent with each other. Written as the same pull-push update, both
-turn the teacher into a working one- and two-step generator, and they
-differ in what they match, the distribution or the trajectories, exactly
-where their negatives differ. The design also has several independent
-choices, namely where the state comes from, which level <span
-class="math inline">\(r\)</span> is trained, how the negative is
-obtained, and where the points are built. Every combination we tried,
-including ones that no published method uses, gives an effective
-few-step generator. These are small CPU runs on 2D data, so image-scale
-behavior may differ.</p>
-<hr />
-<h2 id="extension-drifting-models">7. Extension: Drifting models</h2>
+<h2 id="an-extension-to-drifting-models">7. An extension to drifting
+models</h2>
 <p>Drifting models (<a href="https://arxiv.org/abs/2602.04770">Deng et
 al., 2026</a>) train a one-step generator <span
 class="math inline">\(\hat x = G_\theta(\epsilon)\)</span> without any
@@ -1056,14 +1117,14 @@ around it and pushed away from the kernel mean of the generator’s own
 samples around it. Their Algorithm 2 adds a second softmax over the
 batch of generated samples and uses the geometric mean of the two
 normalizations as the kernel weights. This gives <span
-class="math inline">\(V = s^+ s^-(x_{\text{pos}} -
-x_{\text{neg}})\)</span>, where <span class="math inline">\(s^+\)</span>
-and <span class="math inline">\(s^-\)</span> are the total weights that
+class="math inline">\(V = m^+ m^-(x_{\text{pos}} -
+x_{\text{neg}})\)</span>, where <span class="math inline">\(m^+\)</span>
+and <span class="math inline">\(m^-\)</span> are the total weights that
 a sample places on the positives and on the negatives, and <span
 class="math inline">\(x_{\text{pos}}\)</span> and <span
 class="math inline">\(x_{\text{neg}}\)</span> are the means under these
 weights. This corresponds to the per-sample weight <span
-class="math inline">\(W = s^+ s^-\)</span>. The algorithm also sums
+class="math inline">\(W = m^+ m^-\)</span>. The algorithm also sums
 <span class="math inline">\(V\)</span> over several temperatures and
 normalizes the feature scale and the drift magnitude.</p>
 <p><strong>The two points as posterior means.</strong> In flow matching,
@@ -1330,18 +1391,16 @@ E[\epsilon\mid x_t]-\mathbb E[x_0\mid x_t]\)</span>. Hence <span
 class="math inline">\(\mathbb E[\epsilon\mid x_t] = x_t +
 (1-t)v\)</span> and <span class="math inline">\(\mathbb E[x_0\mid x_t] =
 x_t - t\,v = X[x_t,v,0]\)</span>.</p>
-Applied to the student and to the data, with scores <span
-class="math inline">\(s_\theta=\nabla\log p_{\theta,t}\)</span> and
-<span class="math inline">\(s_{\text{data}}=\nabla\log
-p_{\text{data},t}\)</span> and velocities <span
+Applied to the student and to the data, whose velocities are <span
 class="math inline">\(v_\phi\)</span> and <span
 class="math inline">\(v_{\text{teacher}}\)</span>, this gives <span
-class="math inline">\(s_\theta - s_{\text{data}} =
-w_t\,(v_{\text{teacher}} - v_\phi)\)</span> with <span
-class="math inline">\(w_t=(1-t)/t\)</span>. The order of the two fields
-flips when scores are written as velocities. The reverse-KL gradient for
-a renoised sample is <span class="math inline">\(\mathbb E[(s_\theta -
-s_{\text{data}})(x_{t&#39;})^\top \partial
+class="math inline">\(\nabla\log p_{\theta,t} - \nabla\log
+p_{\text{data},t} = w_t\,(v_{\text{teacher}} - v_\phi)\)</span> with
+<span class="math inline">\(w_t=(1-t)/t\)</span>. The order of the two
+fields flips when scores are written as velocities. The reverse-KL
+gradient for a renoised sample is <span class="math inline">\(\mathbb
+E[(\nabla\log p_{\theta,t&#39;} - \nabla\log
+p_{\text{data},t&#39;})(x_{t&#39;})^\top \partial
 x_{t&#39;}/\partial\theta]\)</span>. With <span
 class="math inline">\(\partial x_{t&#39;}/\partial\theta =
 (1-t&#39;)\,\partial\hat x/\partial\theta\)</span>, it becomes the DMD
@@ -1395,22 +1454,22 @@ class="math inline">\(a^2r^2+b^2 = t&#39;^2\)</span>. Tweedie’s formula
 expresses a posterior mean under Gaussian noise through the score of the
 noised distribution. For this kernel it gives <span
 class="math inline">\(\mathbb E[x_r\mid x_{t&#39;}] = \big(x_{t&#39;} +
-b^2\,s(x_{t&#39;})\big)/a\)</span>, where <span
-class="math inline">\(s\)</span> is the score of the distribution of
-<span class="math inline">\(x_{t&#39;}\)</span>. For the data, <span
-class="math inline">\(s = s_{\text{data}}\)</span> follows from the
-teacher’s velocity by Appendix B. The fake, conditioned on <span
-class="math inline">\(r\)</span>, is fitted by denoising score matching
-on the student’s pairs <span class="math inline">\((\hat x^\theta_r,
-x_{t&#39;})\)</span>. With <span
+b^2\,\nabla\log p_{t&#39;}(x_{t&#39;})\big)/a\)</span>, where <span
+class="math inline">\(p_{t&#39;}\)</span> is the distribution of <span
+class="math inline">\(x_{t&#39;}\)</span>. For the data, <span
+class="math inline">\(\nabla\log p_{\text{data},t&#39;}\)</span> follows
+from the teacher’s velocity by Appendix B. The fake, conditioned on
+<span class="math inline">\(r\)</span>, is fitted by denoising score
+matching on the student’s pairs <span class="math inline">\((\hat
+x^\theta_r, x_{t&#39;})\)</span>. With <span
 class="math inline">\(p_{\theta,t&#39;}\)</span> the distribution of
 <span class="math inline">\(x_{t&#39;}\)</span> built from the student’s
 points, the gradient of <span
 class="math inline">\(\mathrm{KL}(p_{\theta,t&#39;}\,\|\,p_{\text{data},t&#39;})\)</span>
 with respect to the moved point is <span
-class="math inline">\(a\,(s_\theta -
-s_{\text{data}})(x_{t&#39;})\)</span>, which is proportional to <span
-class="math inline">\(x_{\text{neg}} - x_{\text{pos}}\)</span>.
+class="math inline">\(a\,(\nabla\log p_{\theta,t&#39;} - \nabla\log
+p_{\text{data},t&#39;})(x_{t&#39;})\)</span>, which is proportional to
+<span class="math inline">\(x_{\text{neg}} - x_{\text{pos}}\)</span>.
 Descending it pulls <span class="math inline">\(\hat x^\theta_r\)</span>
 toward the teacher’s estimate and away from the fake’s.
 </details>
@@ -1535,8 +1594,8 @@ animation to <a
 href="https://github.com/EDAPINENUT/contrast_gen.edapinenut.github.io/tree/main/materials"><code>materials/</code></a>.
 The functions it calls are in <a
 href="https://github.com/EDAPINENUT/contrast_gen.edapinenut.github.io/blob/main/demo/assess.py"><code>demo/assess.py</code></a>.
-Everything runs on CPU, and the whole notebook takes about 40 minutes
-with 12 training processes running side by side
+Everything runs on CPU, and the parts behind the post take about 40
+minutes with 12 training processes running side by side
 (<code>pip install -r demo/requirements.txt</code>, then run the
 notebook from top to bottom).</p>
 <table>
@@ -1553,6 +1612,12 @@ notebook from top to bottom).</p>
 </tr>
 </thead>
 <tbody>
+<tr>
+<td>Section 1, the teacher with K Euler steps and the flow map</td>
+<td>part 1</td>
+<td><code>train_teacher</code>, <code>teacher_steps</code>,
+<code>anim_teacher_steps</code>, <code>anim_flow_map</code></td>
+</tr>
 <tr>
 <td>Section 2, learning the flow map by simulation</td>
 <td>part 2</td>
