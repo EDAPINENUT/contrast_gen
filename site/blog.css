@@ -189,6 +189,25 @@ h1.section-heading {
   margin-bottom: 8px;
 }
 
+/* Like box at the end of the post */
+.like-box {
+  text-align: center;
+  margin-top: 50px;
+  padding: 22px 20px 26px;
+  border-top: 1px solid #e3d3d1;
+}
+
+.like-text {
+  font-size: 17px;
+  margin-bottom: 14px;
+  color: #292929;
+}
+
+.like-text .fa {
+  color: #9b3022;
+  font-size: 1.15em;
+}
+
 .back-to-top {
   cursor: pointer;
 }
