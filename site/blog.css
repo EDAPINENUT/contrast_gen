@@ -11,6 +11,7 @@
 
 h1.section-heading {
   font-size: 1.2em;
+  text-align: center;
 }
 
 .section-content {
@@ -24,7 +25,7 @@ h1.section-heading {
 
 #post-heading {
   text-align: center;
-  padding: 26px 30px 34px;
+  padding: 30px 30px 30px;
 }
 
 #post-title {
@@ -49,10 +50,6 @@ h1.section-heading {
   margin-top: 6px;
 }
 
-#post-card .social-media .icon-button {
-  top: 14px;
-  margin: 0 5px;
-}
 
 @media screen and (max-width: 800px) {
   #post-card {
@@ -96,7 +93,8 @@ h1.section-heading {
 .section-content h3 {
   font-size: 1em;
   font-weight: bold;
-  margin: 26px 0 8px;
+  text-align: center;
+  margin: 26px 0 10px;
 }
 
 .section-content hr,
