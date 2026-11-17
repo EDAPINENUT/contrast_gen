@@ -132,6 +132,15 @@ code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warni
     Overview
   </h1>
   <div class="section-content">
+<div class="note">
+<p>This post is an expanded version of <a
+href="https://edapinenut.github.io/fewsteprl.page/">FewStepRL</a> and of
+Example 5 (Reward Augmentation for DMD and MeanFlow) in its <a
+href="https://arxiv.org/abs/2611.08240">paper</a>. It compares the
+methods intuitively with toy experiments. For a more rigorous analysis,
+see the paper. If you find this post helpful, please 👍 it at the end of
+the page, or <a href="#citation">cite the paper</a>.</p>
+</div>
 <p>A few-step generator turns noise into a sample with one or a few
 network calls. This post shows that three ways of training such a
 generator, MeanFlow, Distribution Matching Distillation (DMD) and the
@@ -166,6 +175,7 @@ models</a></li>
       <li><a href="#conclusion">8. Conclusion</a></li>
       <li><a href="#appendix">Appendix</a></li>
       <li><a href="#code-1">Code</a></li>
+      <li><a href="#citation">Citation</a></li>
 </ul>
   </div>
 </div>
@@ -1725,10 +1735,29 @@ pull-push loss and the backward pass) are spelled out at the top of the
 <code>train_student</code> section of <code>assess.py</code>.</p>
   </div>
 </div>
+<div id="citation" class="section">
+  <h1 class="section-heading">
+    <i class="fa fa-quote-right" aria-hidden="true"></i>
+    Citation
+  </h1>
+  <div class="section-content">
+<p>This post expands Example 5 of the <a
+href="https://arxiv.org/abs/2611.08240">FewStepRL paper</a>. If you find
+it helpful, please cite</p>
+<div class="sourceCode" id="cb2"><pre
+class="sourceCode bibtex"><code class="sourceCode bibtex"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="va">@article</span>{<span class="ot">lin2026fewsteprl</span>,</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>  <span class="dt">title</span>   = {FewStepRL: Fine-tuning Few-step Diffusion Models with Reinforcement Learning},</span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a>  <span class="dt">author</span>  = {Lin, Haitao and Ren, Minsi and Li, Yang and Ge, Xingtong and</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>             Hu, Zheyuan and Hu, Peiyan and Wu, Tailin},</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a>  <span class="dt">journal</span> = {arXiv preprint arXiv:2611.08240},</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a>  <span class="dt">year</span>    = {2026}</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a>}</span></code></pre></div>
+  </div>
+</div>
 
 
 <div id="like" class="section like-box">
-  <p class="like-text">If you think this blog is helpful, please 👍 it.</p>
+  <p class="like-text">If you think this blog is helpful, please 👍 it, or <a href="#citation">cite the paper</a>.</p>
   <button id="like-btn" class="like-btn" type="button" aria-pressed="false" title="Like this post">
     <span class="like-icon" aria-hidden="true">👍</span><span id="like-count">&middot;</span>
   </button>

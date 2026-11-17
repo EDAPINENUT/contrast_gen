@@ -21,7 +21,7 @@ DESCRIPTION = ("MeanFlow, Distribution Matching Distillation and drifting models
 ICONS = [("velocit", "fa-location-arrow"), ("simulation", "fa-road"), ("as pull", "fa-exchange"),
          ("meanflow and dmd", "fa-cubes"), ("design", "fa-sliders"), ("toy", "fa-flask"),
          ("drifting", "fa-random"), ("conclusion", "fa-flag-checkered"), ("appendix", "fa-paperclip"),
-         ("code", "fa-code")]
+         ("code", "fa-code"), ("citation", "fa-quote-right")]
 
 
 def github_link(path):

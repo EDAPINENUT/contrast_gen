@@ -104,6 +104,18 @@ h1.section-heading {
   margin-bottom: 2px;
 }
 
+/* Note at the top of the overview */
+.section-content .note {
+  background: #fbf2f0;
+  border-left: 3px solid #9b3022;
+  padding: 10px 16px;
+  margin-bottom: 20px;
+}
+
+.section-content .note p:last-child {
+  margin-bottom: 0;
+}
+
 /* Figures */
 .section-content figure {
   margin: 22px 0 26px;

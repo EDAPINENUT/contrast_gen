@@ -1,5 +1,11 @@
 # Contrastive Generation: Training a Few-Step Generator by Pulling and Pushing Its Samples
 
+<div class="note">
+
+This post is an expanded version of [FewStepRL](https://edapinenut.github.io/fewsteprl.page/) and of Example 5 (Reward Augmentation for DMD and MeanFlow) in its [paper](https://arxiv.org/abs/2611.08240). It compares the methods intuitively with toy experiments. For a more rigorous analysis, see the paper. If you find this post helpful, please 👍 it at the end of the page, or [cite the paper](#citation).
+
+</div>
+
 <!-- F1: title figure, a still from V5 (to render) -->
 
 A few-step generator turns noise into a sample with one or a few network calls. This post shows that three ways of training such a generator, MeanFlow, Distribution Matching Distillation (DMD) and the recently proposed drifting models, use the same update. Each update moves a point produced by the generator toward a *positive* point, which carries information about the data, and away from a *negative* point, which describes the generator itself. The methods differ in how they obtain the negative and in which state they build the two points from.
@@ -497,3 +503,19 @@ All experiments of this post can be rerun from [`demo/`](demo/). The notebook [`
 | Section 7, drifting models and semi-drift | part 5 | `drift_field`, `kernel_posterior`; `train_student` with `--variant drift-on-r0` (`--drift-kernel gauss` for FM-ideal drift) or `--dmd-neg kernel` (semi-drift); `export_kernel`, `table_kernel` |
 
 A single run can also be started from the command line, for example `python demo/assess.py train --variant dmd-on-r0 --seed 0 --preset smoke --device cpu --steps 3000`, after training the teacher with `python demo/assess.py teacher`. The five stages of a training step (samples for the auxiliary network, the prediction $x_{\text{pred}}$, the displacement $x_{\text{pos}} - x_{\text{neg}}$, the pull-push loss and the backward pass) are spelled out at the top of the `train_student` section of `assess.py`.
+
+---
+
+## Citation
+
+This post expands Example 5 of the [FewStepRL paper](https://arxiv.org/abs/2611.08240). If you find it helpful, please cite
+
+```bibtex
+@article{lin2026fewsteprl,
+  title   = {FewStepRL: Fine-tuning Few-step Diffusion Models with Reinforcement Learning},
+  author  = {Lin, Haitao and Ren, Minsi and Li, Yang and Ge, Xingtong and
+             Hu, Zheyuan and Hu, Peiyan and Wu, Tailin},
+  journal = {arXiv preprint arXiv:2611.08240},
+  year    = {2026}
+}
+```
